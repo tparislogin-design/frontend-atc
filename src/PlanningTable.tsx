@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-// CORRECTION 1 : Ajout de "type" pour l'import de ColDef
+// CORRECTION 1 : Ajout de "type" ici pour corriger l'erreur TS1484
 import type { ColDef } from 'ag-grid-community'; 
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-balham.css";
@@ -26,7 +26,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({ data, year }) => {
         field: dayStr,
         headerName: `${date.getDate()}/${date.getMonth()+1}`,
         width: 60,
-        // CORRECTION 2 : Ajout de ": any" pour calmer TypeScript sur les styles CSS
+        // CORRECTION 2 : Ajout de ": any" pour corriger l'erreur TS2322 (types CSS stricts)
         cellStyle: (params): any => {
           if (params.value === 'M') return { backgroundColor: '#fff7ed', color: '#9a3412', textAlign: 'center' };
           if (params.value === 'S') return { backgroundColor: '#fef2f2', color: '#991b1b', textAlign: 'center' };
