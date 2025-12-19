@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-// CORRECTION 1 : On ajoute "type" explicitement
+// CORRECTION 1 : "import type" est OBLIGATOIRE ici
 import type { ColDef, CellClassParams } from 'ag-grid-community'; 
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-balham.css";
@@ -15,6 +15,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({ data, year }) => {
   const columnDefs = useMemo<ColDef[]>(() => {
     if (!data || data.length === 0) return [];
     
+    // Colonne Agent
     const cols: ColDef[] = [{
       field: 'Agent',
       pinned: 'left',
@@ -22,6 +23,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({ data, year }) => {
       cellStyle: { fontWeight: 'bold', backgroundColor: '#f8fafc', borderRight: '2px solid #e2e8f0' }
     }];
 
+    // Colonnes Jours
     const keys = Object.keys(data[0]).filter(k => k !== 'Agent');
     
     keys.forEach(dayStr => {
@@ -36,22 +38,24 @@ const PlanningTable: React.FC<PlanningTableProps> = ({ data, year }) => {
         width: 65,
         editable: true,
         headerClass: isWeekend ? 'weekend-header' : '',
-        // CORRECTION 2 : On force le type de retour à "any" pour ignorer les erreurs CSS strictes
+        
+        // CORRECTION 2 : On force le type de retour à "any" pour ignorer l'erreur TS2322
+        // Cela dit au compilateur : "Fais-moi confiance, c'est du CSS valide"
         cellStyle: (params: CellClassParams): any => {
           const val = params.value;
           
-          // Style par défaut commun pour éviter les objets incomplets
-          const baseStyle = { textAlign: 'center', borderRight: '1px solid #eee' };
+          // Base commune pour éviter les incohérences de type
+          const base = { textAlign: 'center', borderRight: '1px solid #eee' };
 
-          if (val === 'M') return { ...baseStyle, backgroundColor: '#fff7ed', color: '#9a3412', fontWeight: 'bold' };
-          if (['J1', 'J2', 'J3'].includes(val)) return { ...baseStyle, backgroundColor: '#f0fdf4', color: '#166534', fontWeight: 'bold' };
-          if (['A1', 'A2'].includes(val)) return { ...baseStyle, backgroundColor: '#eff6ff', color: '#1e40af', fontWeight: 'bold' };
-          if (val === 'S') return { ...baseStyle, backgroundColor: '#fef2f2', color: '#991b1b', fontWeight: 'bold' };
+          if (val === 'M') return { ...base, backgroundColor: '#fff7ed', color: '#9a3412', fontWeight: 'bold' };
+          if (['J1', 'J2', 'J3'].includes(val)) return { ...base, backgroundColor: '#f0fdf4', color: '#166534', fontWeight: 'bold' };
+          if (['A1', 'A2'].includes(val)) return { ...base, backgroundColor: '#eff6ff', color: '#1e40af', fontWeight: 'bold' };
+          if (val === 'S') return { ...base, backgroundColor: '#fef2f2', color: '#991b1b', fontWeight: 'bold' };
           
-          if (val === 'OFF') return { ...baseStyle, backgroundColor: '#ffffff', color: '#cbd5e1', fontSize: '0.8em' };
-          if (val === 'C') return { ...baseStyle, backgroundColor: '#f1f5f9', color: '#64748b', fontStyle: 'italic' };
+          if (val === 'OFF') return { ...base, backgroundColor: '#ffffff', color: '#cbd5e1', fontSize: '0.8em' };
+          if (val === 'C') return { ...base, backgroundColor: '#f1f5f9', color: '#64748b', fontStyle: 'italic' };
           
-          return baseStyle;
+          return base;
         }
       });
     });
