@@ -129,7 +129,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({ data, year }) => {
       <AgGridReact
         rowData={data}
         columnDefs={columnDefs}
-        defaultColDef={{ resizable: true, suppressMenu: true, sortable: false }}
+        defaultColDef={{ resizable: true, suppresMenu: true, sortable: false }}
         headerHeight={40}
         rowHeight={35}
       />
