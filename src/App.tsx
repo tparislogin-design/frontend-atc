@@ -3,7 +3,7 @@ import axios from 'axios'
 import PlanningTable from './PlanningTable'
 
 // ⚠️ REMPLACE PAR TON URL HUGGING FACE (ex: https://ton-space.hf.space/api/optimize)
-const API_URL = "https://ttttty-ty.hf.space"; 
+const API_URL = "https://ttttty-ty.hf.space/api/optimize";
 
 const DEFAULT_CONFIG = {
   ANNEE: 2025,
