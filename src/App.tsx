@@ -24,9 +24,9 @@ const DEFAULT_CONFIG = {
 
 function App() {
   // --- ÉTAT (Variables) ---
-  const [year, setYear] = useState(2025);
-  const [startDay, setStartDay] = useState(335);
-  const [endDay, setEndDay] = useState(340); // Période courte par défaut
+  const [year, setYear] = useState(2026);
+  const [startDay, setStartDay] = useState(1);
+  const [endDay, setEndDay] = useState(28); // Période courte par défaut
   
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{type: 'error'|'success'|'loading'|'', msg: string}>({type:'', msg:''});
