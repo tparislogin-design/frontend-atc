@@ -1,9 +1,13 @@
 import React, { useMemo } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-// CORRECTION 1 : "import type" est OBLIGATOIRE ici
-import type { ColDef, CellClassParams } from 'ag-grid-community'; 
-import "ag-grid-community/styles/ag-grid.css";
-import "ag-grid-community/styles/ag-theme-balham.css";
+import type {
+  ColDef,
+  CellClassParams,
+  CellStyle,
+  CellStyleFunc,
+} from 'ag-grid-community';
+import 'ag-grid-community/styles/ag-grid.css';
+import 'ag-grid-community/styles/ag-theme-balham.css';
 
 interface PlanningTableProps {
   data: any[];
@@ -11,25 +15,100 @@ interface PlanningTableProps {
 }
 
 const PlanningTable: React.FC<PlanningTableProps> = ({ data, year }) => {
-
   const columnDefs = useMemo<ColDef[]>(() => {
     if (!data || data.length === 0) return [];
-    
+
     // Colonne Agent
-    const cols: ColDef[] = [{
-      field: 'Agent',
-      pinned: 'left',
-      width: 100,
-      cellStyle: { fontWeight: 'bold', backgroundColor: '#f8fafc', borderRight: '2px solid #e2e8f0' }
-    }];
+    const cols: ColDef[] = [
+      {
+        field: 'Agent',
+        pinned: 'left',
+        width: 100,
+        cellStyle: {
+          fontWeight: 'bold',
+          backgroundColor: '#f8fafc',
+          borderRight: '2px solid #e2e8f0',
+        } as CellStyle,
+      },
+    ];
 
     // Colonnes Jours
-    const keys = Object.keys(data[0]).filter(k => k !== 'Agent');
-    
-    keys.forEach(dayStr => {
-      const dayNum = parseInt(dayStr);
-      const date = new Date(year, 0, dayNum); 
-      const dayName = date.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit' });
+    const keys = Object.keys(data[0]).filter((k) => k !== 'Agent');
+
+    const dayCellStyle: CellStyleFunc<any, any, any> = (
+      params: CellClassParams
+    ): CellStyle => {
+      const val = params.value;
+      const base: CellStyle = {
+        textAlign: 'center',
+        borderRight: '1px solid #eee',
+      };
+
+      if (val === 'M') {
+        return {
+          ...base,
+          backgroundColor: '#fff7ed',
+          color: '#9a3412',
+          fontWeight: 'bold',
+        };
+      }
+
+      if (['J1', 'J2', 'J3'].includes(val)) {
+        return {
+          ...base,
+          backgroundColor: '#f0fdf4',
+          color: '#166534',
+          fontWeight: 'bold',
+        };
+      }
+
+      if (['A1', 'A2'].includes(val)) {
+        return {
+          ...base,
+          backgroundColor: '#eff6ff',
+          color: '#1e40af',
+          fontWeight: 'bold',
+        };
+      }
+
+      if (val === 'S') {
+        return {
+          ...base,
+          backgroundColor: '#fef2f2',
+          color: '#991b1b',
+          fontWeight: 'bold',
+        };
+      }
+
+      if (val === 'OFF') {
+        return {
+          ...base,
+          backgroundColor: '#ffffff',
+          color: '#cbd5e1',
+          fontSize: '0.8em',
+        };
+      }
+
+      if (val === 'C') {
+        return {
+          ...base,
+          backgroundColor: '#f1f5f9',
+          color: '#64748b',
+          fontStyle: 'italic',
+        };
+      }
+
+      // Style par défaut
+      return base;
+    };
+
+    keys.forEach((dayStr) => {
+      const dayNum = parseInt(dayStr, 10);
+      const date = new Date(year, 0, dayNum);
+      const dayName = date.toLocaleDateString('fr-FR', {
+        weekday: 'short',
+        day: '2-digit',
+      });
       const isWeekend = date.getDay() === 0 || date.getDay() === 6;
 
       cols.push({
@@ -38,27 +117,10 @@ const PlanningTable: React.FC<PlanningTableProps> = ({ data, year }) => {
         width: 65,
         editable: true,
         headerClass: isWeekend ? 'weekend-header' : '',
-        
-        // CORRECTION 2 : On force le type de retour à "any" pour ignorer l'erreur TS2322
-        // Cela dit au compilateur : "Fais-moi confiance, c'est du CSS valide"
-        cellStyle: (params: CellClassParams): any => {
-          const val = params.value;
-          
-          // Base commune pour éviter les incohérences de type
-          const base = { textAlign: 'center', borderRight: '1px solid #eee' };
-
-          if (val === 'M') return { ...base, backgroundColor: '#fff7ed', color: '#9a3412', fontWeight: 'bold' };
-          if (['J1', 'J2', 'J3'].includes(val)) return { ...base, backgroundColor: '#f0fdf4', color: '#166534', fontWeight: 'bold' };
-          if (['A1', 'A2'].includes(val)) return { ...base, backgroundColor: '#eff6ff', color: '#1e40af', fontWeight: 'bold' };
-          if (val === 'S') return { ...base, backgroundColor: '#fef2f2', color: '#991b1b', fontWeight: 'bold' };
-          
-          if (val === 'OFF') return { ...base, backgroundColor: '#ffffff', color: '#cbd5e1', fontSize: '0.8em' };
-          if (val === 'C') return { ...base, backgroundColor: '#f1f5f9', color: '#64748b', fontStyle: 'italic' };
-          
-          return base;
-        }
+        cellStyle: dayCellStyle,
       });
     });
+
     return cols;
   }, [data, year]);
 
