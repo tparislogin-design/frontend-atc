@@ -7,7 +7,7 @@ import ConfigPanel from './ConfigPanel';
 const API_URL = "https://ttttty-ty.hf.space/api/optimize"; 
 
 const DEFAULT_CONFIG = {
-  ANNEE: 2025,
+  ANNEE: 2026,
   CONTROLEURS: ["GAO", "WBR", "PLC", "CML", "BBD", "LAK", "MZN", "TRT", "CLO"],
   CONTROLLERS_AFFECTES_BUREAU: [],
   VACATIONS: { 
@@ -16,7 +16,7 @@ const DEFAULT_CONFIG = {
     "S": {debut: 15.0, fin: 23.0} 
   },
   CONTRAT: { 
-    MIN_REST_HOURS: 8, // 8h pour permettre Soir -> Matin si besoin
+    MIN_REST_HOURS: 8, // 8h pour permettre Soir -> Matin
     MAX_CONSECUTIVE_SHIFTS: 5, 
     BUFFER_DAYS: 2, 
     SOLVER_TIME_LIMIT: 10 
@@ -24,7 +24,7 @@ const DEFAULT_CONFIG = {
 };
 
 function App() {
-  // --- ÉTAT ---
+  // --- ÉTAT (STATE) ---
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [showConfig, setShowConfig] = useState(false);
   
@@ -36,61 +36,82 @@ function App() {
   const [status, setStatus] = useState<{type: 'error'|'success'|'loading'|'', msg: string}>({type:'', msg:''});
   const [planning, setPlanning] = useState<any[]>([]);
 
-  // Chargement initial depuis LocalStorage (Sauvegarde Navigateur)
+  // 1. Chargement de la config sauvegardée au démarrage
   useEffect(() => {
     const savedConfig = localStorage.getItem('tds_config');
     if (savedConfig) {
       try {
         setConfig(JSON.parse(savedConfig));
       } catch (e) {
-        console.error("Erreur lecture config sauvegardée");
+        console.error("Erreur lecture config locale", e);
       }
     }
   }, []);
 
-  // Sauvegarde de la configuration
+  // 2. Fonction pour sauvegarder la config depuis le panneau
   const handleSaveConfig = (newConfig: any) => {
     setConfig(newConfig);
     localStorage.setItem('tds_config', JSON.stringify(newConfig));
-    setShowConfig(false); // Fermer la modale
-    setStatus({type:'success', msg:'Configuration sauvegardée localement !'});
+    setShowConfig(false);
+    setStatus({type:'success', msg:'✅ Configuration sauvegardée localement ! Relancez le calcul.'});
   };
 
+  // 3. Fonction principale : Lancer le calcul
   const handleOptimize = async () => {
     setLoading(true);
-    setStatus({type: 'loading', msg: "🚀 Calcul en cours..."});
-    setPlanning([]);
+    setStatus({type: 'loading', msg: "🚀 Envoi des données au cerveau IA (Hugging Face)..."});
+    setPlanning([]); // On vide le tableau avant de commencer
 
     try {
-      // Construction du payload avec la CONFIG ACTUELLE (modifiée)
+      // Préparation du paquet à envoyer
       const payload = {
         year: Number(year),
         start_day: Number(startDay),
         end_day: Number(endDay),
-        config: { ...config, ANNEE: Number(year) } // Force l'année
+        // On fusionne la config utilisateur avec l'année sélectionnée
+        config: { ...config, ANNEE: Number(year) } 
       };
 
-      console.log("Envoi avec config perso :", payload);
+      console.log("📤 Envoi au backend :", payload);
 
+      // Appel API
       const response = await axios.post(API_URL, payload);
 
-      if (response.data.status === "Succès") {
+      console.log("📥 Réponse reçue :", response.data);
+
+      // --- VERIFICATION ROBUSTE ---
+      // On vérifie si "data" existe et si c'est une liste non vide.
+      // On ignore le message textuel "status" qui peut varier.
+      const hasData = response.data.data && Array.isArray(response.data.data) && response.data.data.length > 0;
+
+      if (hasData) {
         setPlanning(response.data.data);
-        setStatus({type: 'success', msg: `✅ Planning généré ! (${response.data.algorithm_status})`});
+        setStatus({
+            type: 'success', 
+            msg: `✅ Planning généré avec succès ! (${response.data.data.length} lignes récupérées)`
+        });
       } else {
-        setStatus({type: 'error', msg: "❌ Toujours pas de solution."});
+        // Le backend a répondu, mais sans données (Infeasible)
+        console.warn("Réponse vide du backend");
+        setStatus({
+            type: 'error', 
+            msg: "❌ Le moteur a répondu, mais n'a trouvé aucune solution mathématique. Essayez d'assouplir les règles (Config)."
+        });
       }
+
     } catch (error: any) {
-      console.error(error);
-      setStatus({type: 'error', msg: `⚠️ Erreur : ${error.message}`});
+      console.error("ERREUR API :", error);
+      setStatus({type: 'error', msg: `⚠️ Erreur de connexion : ${error.message}`});
     } finally {
       setLoading(false);
     }
   };
 
+  // --- RENDU VISUEL ---
   return (
     <div className="app-container">
-      {/* MODALE DE CONFIGURATION */}
+      
+      {/* MODALE CONFIGURATION */}
       {showConfig && (
         <ConfigPanel 
           config={config} 
@@ -99,8 +120,11 @@ function App() {
         />
       )}
 
+      {/* HEADER */}
       <header>
-        <div className="logo">✈️ TDS Manager <span className="badge">v2.1</span></div>
+        <div className="logo">
+          ✈️ TDS Manager <span className="badge">CLOUD v2</span>
+        </div>
         <button 
           onClick={() => setShowConfig(true)}
           style={{
@@ -112,6 +136,7 @@ function App() {
         </button>
       </header>
 
+      {/* BARRE DE PILOTAGE */}
       <div className="control-panel">
         <div className="input-group">
           <label>Année</label>
@@ -128,20 +153,31 @@ function App() {
 
         <div style={{flex: 1, display: 'flex', justifyContent: 'flex-end'}}>
           <button className="btn-primary" onClick={handleOptimize} disabled={loading}>
-            {loading ? 'Calcul...' : '⚡ LANCER OPTIMISATION'}
+            {loading ? 'Calcul en cours...' : '⚡ LANCER L\'OPTIMISATION'}
           </button>
         </div>
       </div>
 
-      {status.msg && <div className={`status-box status-${status.type}`}>{status.msg}</div>}
+      {/* ZONE DE MESSAGES */}
+      {status.msg && (
+        <div className={`status-box status-${status.type}`}>
+          {status.msg}
+        </div>
+      )}
 
+      {/* TABLEAU DE RÉSULTAT */}
       <div className="result-area">
         {planning.length > 0 ? (
           <PlanningTable data={planning} year={year} />
         ) : (
-          <div style={{padding: '40px', textAlign: 'center', color: '#ccc'}}>Aucun résultat</div>
+          <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '400px', color: '#cbd5e1', flexDirection: 'column'}}>
+            <div style={{fontSize: '4rem', marginBottom: '20px'}}>📅</div>
+            <div>Le planning apparaîtra ici.</div>
+            <div style={{fontSize: '0.8rem', marginTop: '10px'}}>(Assurez-vous que le backend Hugging Face est réveillé)</div>
+          </div>
         )}
       </div>
+
     </div>
   );
 }
