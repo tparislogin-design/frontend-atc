@@ -1,6 +1,19 @@
 import React, { useMemo } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-import type { ColDef, CellClassParams } from 'ag-grid-community';
+
+// --- 1. IMPORTS CRITIQUES (TYPES + MODULES) ---
+import { 
+  ModuleRegistry, 
+  AllCommunityModule 
+} from 'ag-grid-community'; 
+
+// "import type" est obligatoire pour les interfaces avec Vite/TS récent
+import type { ColDef } from 'ag-grid-community';
+
+// --- 2. ENREGISTREMENT DES MODULES (OBLIGATOIRE v35+) ---
+ModuleRegistry.registerModules([ AllCommunityModule ]);
+
+// Imports CSS
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-balham.css";
 
@@ -11,35 +24,30 @@ interface PlanningTableProps {
 
 const PlanningTable: React.FC<PlanningTableProps> = ({ data, year }) => {
 
-  // --- DEBUG : Vérifier ce qu'on reçoit ---
-  console.log("PlanningTable REÇOIT :", data);
+  // Debug : Pour être sûr que les données arrivent
+  if (data && data.length > 0) {
+    console.log("PlanningTable: Rendu avec", data.length, "lignes.");
+  }
 
   const columnDefs = useMemo<ColDef[]>(() => {
-    if (!data || data.length === 0) {
-      console.warn("PlanningTable: Données vides !");
-      return [];
-    }
+    if (!data || data.length === 0) return [];
     
-    console.log("PlanningTable: Génération des colonnes...");
-    console.log("Clés détectées :", Object.keys(data[0]));
-
-    // 1. Colonne Agent
+    // A. Colonne Agent (Figée à gauche)
     const cols: ColDef[] = [{
       field: 'Agent',
       pinned: 'left',
-      width: 120,
-      cellStyle: { fontWeight: 'bold', backgroundColor: '#f8fafc', borderRight: '2px solid #ccc' }
+      width: 110,
+      cellStyle: { fontWeight: 'bold', backgroundColor: '#f8fafc', borderRight: '2px solid #e2e8f0' }
     }];
 
-    // 2. Colonnes Jours
+    // B. Colonnes Jours (Dynamiques)
     const keys = Object.keys(data[0]).filter(k => k !== 'Agent');
     
-    // On trie les clés (qui sont des numéros de jours en string) pour qu'elles soient dans l'ordre
+    // Tri numérique des jours (pour éviter que J10 arrive avant J2)
     keys.sort((a, b) => parseInt(a) - parseInt(b));
 
     keys.forEach(dayStr => {
       const dayNum = parseInt(dayStr);
-      // Vérification sécurité date
       if (isNaN(dayNum)) return;
 
       const date = new Date(year, 0, dayNum); 
@@ -52,7 +60,9 @@ const PlanningTable: React.FC<PlanningTableProps> = ({ data, year }) => {
         width: 60,
         editable: true,
         headerClass: isWeekend ? 'weekend-header' : '',
-        cellStyle: (params: CellClassParams): any => {
+        
+        // Utilisation de "any" pour éviter les erreurs strictes de TypeScript sur le CSS
+        cellStyle: (params: any) => {
           const val = params.value;
           const base = { textAlign: 'center', borderRight: '1px solid #eee' };
 
@@ -60,6 +70,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({ data, year }) => {
           if (['J1', 'J2', 'J3'].includes(val)) return { ...base, backgroundColor: '#f0fdf4', color: '#166534', fontWeight: 'bold' };
           if (['A1', 'A2'].includes(val)) return { ...base, backgroundColor: '#eff6ff', color: '#1e40af', fontWeight: 'bold' };
           if (val === 'S') return { ...base, backgroundColor: '#fef2f2', color: '#991b1b', fontWeight: 'bold' };
+          
           if (val === 'OFF') return { ...base, backgroundColor: '#ffffff', color: '#cbd5e1', fontSize: '0.8em' };
           if (val === 'C') return { ...base, backgroundColor: '#f1f5f9', color: '#64748b', fontStyle: 'italic' };
           
@@ -67,23 +78,22 @@ const PlanningTable: React.FC<PlanningTableProps> = ({ data, year }) => {
         }
       });
     });
-    
-    console.log("Colonnes générées :", cols.length);
     return cols;
   }, [data, year]);
 
-  // Si pas de colonnes, on affiche un message d'erreur
-  if (columnDefs.length === 0) {
-    return <div style={{color:'red', padding: 20}}>Erreur: Aucune colonne générée. Vérifiez la console (F12).</div>
-  }
+  // Si pas de données, on n'affiche rien (ou un message)
+  if (!data || data.length === 0) return null;
 
   return (
-    // J'ai ajouté une bordure rouge et un background pour être sûr qu'on le voit
-    <div className="ag-theme-balham" style={{ height: 600, width: '100%', border: '1px solid blue' }}>
+    <div className="ag-theme-balham" style={{ height: 600, width: '100%' }}>
       <AgGridReact
         rowData={data}
         columnDefs={columnDefs}
-        defaultColDef={{ resizable: true, sortable: false }}
+        defaultColDef={{ 
+            resizable: true, 
+            sortable: false,
+            filter: false // Remplace suppressMenu
+        }}
         headerHeight={40}
         rowHeight={35}
       />
