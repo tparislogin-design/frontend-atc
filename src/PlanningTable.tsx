@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-// CORRECTION : On utilise "import type" pour éviter l'erreur TS1484
-import type { ColDef } from 'ag-grid-community';
+import type { ColDef } from 'ag-grid-community'; // Toujours garder "type"
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-balham.css";
 
@@ -39,11 +38,9 @@ const PlanningTable: React.FC<PlanningTableProps> = ({ data, year }) => {
         editable: true,
         headerClass: isWeekend ? 'weekend-header' : '',
         
-        // CORRECTION RADICALE : On met "params: any" pour que TS arrête de vérifier le CSS
+        // On garde le "any" pour éviter les erreurs CSS précédentes
         cellStyle: (params: any) => {
           const val = params.value;
-          
-          // Style de base
           const base = { textAlign: 'center', borderRight: '1px solid #eee' };
 
           if (val === 'M') return { ...base, backgroundColor: '#fff7ed', color: '#9a3412', fontWeight: 'bold' };
@@ -66,7 +63,12 @@ const PlanningTable: React.FC<PlanningTableProps> = ({ data, year }) => {
       <AgGridReact
         rowData={data}
         columnDefs={columnDefs}
-        defaultColDef={{ resizable: true, suppressMenu: true, sortable: false }}
+        // CORRECTION ICI : J'ai supprimé "suppressMenu: true" qui causait l'erreur
+        defaultColDef={{ 
+            resizable: true, 
+            sortable: false,
+            filter: false // Cela remplace souvent suppressMenu pour désactiver les filtres
+        }}
         headerHeight={40}
         rowHeight={35}
       />
