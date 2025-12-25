@@ -119,27 +119,45 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, onSave, onClose }) =>
           {/* ONGLET RÈGLES */}
           {activeTab === 'regles' && (
             <div style={{display:'flex', flexDirection:'column', gap:'15px'}}>
-              <label>
-                <strong>Repos Minimum (Heures)</strong>
-                <input 
-                  type="number" 
-                  value={localConfig.CONTRAT.MIN_REST_HOURS}
-                  onChange={(e) => setLocalConfig({...localConfig, CONTRAT: {...localConfig.CONTRAT, MIN_REST_HOURS: parseInt(e.target.value)}})}
-                  style={{...inputStyle, display:'block', marginTop:'5px'}}
-                />
-              </label>
-              <label>
-                <strong>Max Jours Consécutifs</strong>
-                <input 
-                  type="number" 
-                  value={localConfig.CONTRAT.MAX_CONSECUTIVE_SHIFTS}
-                  onChange={(e) => setLocalConfig({...localConfig, CONTRAT: {...localConfig.CONTRAT, MAX_CONSECUTIVE_SHIFTS: parseInt(e.target.value)}})}
-                  style={{...inputStyle, display:'block', marginTop:'5px'}}
-                />
-              </label>
+              
+              <div style={{borderBottom:'1px solid #eee', paddingBottom:'10px', marginBottom:'10px'}}>
+                <h4 style={{margin:'0 0 10px 0', color:'#2563eb'}}>Temps de Travail</h4>
+                <label style={{display:'block', marginBottom:'10px'}}>
+                  Max Heures / Semaine Calendaire (Lun-Dim)
+                  <input type="number" 
+                    value={localConfig.CONTRAT.MAX_HOURS_WEEK_CALENDAR || 36}
+                    onChange={(e) => setLocalConfig({...localConfig, CONTRAT: {...localConfig.CONTRAT, MAX_HOURS_WEEK_CALENDAR: parseInt(e.target.value)}})}
+                    style={inputStyle}
+                  />
+                </label>
+                <label style={{display:'block'}}>
+                  Max Heures / 7 Jours Glissants
+                  <input type="number" 
+                    value={localConfig.CONTRAT.MAX_HOURS_7_ROLLING || 44}
+                    onChange={(e) => setLocalConfig({...localConfig, CONTRAT: {...localConfig.CONTRAT, MAX_HOURS_7_ROLLING: parseInt(e.target.value)}})}
+                    style={inputStyle}
+                  />
+                </label>
+              </div>
+
+              <div>
+                <h4 style={{margin:'0 0 10px 0', color:'#2563eb'}}>Repos & Cycles</h4>
+                <label style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px'}}>
+                  <input type="checkbox" 
+                    checked={localConfig.CONTRAT.REQUIRE_2_CONSECUTIVE_REST_DAYS !== false}
+                    onChange={(e) => setLocalConfig({...localConfig, CONTRAT: {...localConfig.CONTRAT, REQUIRE_2_CONSECUTIVE_REST_DAYS: e.target.checked}})}
+                  />
+                  Imposer 2 jours de repos CONSÉCUTIFS (sur 7j glissants)
+                </label>
+                
+                <label style={{display:'block', marginBottom:'10px'}}>
+                  Repos Quotidien Min (Heures)
+                  <input type="number" value={localConfig.CONTRAT.MIN_REST_HOURS} onChange={(e) => setLocalConfig({...localConfig, CONTRAT: {...localConfig.CONTRAT, MIN_REST_HOURS: parseInt(e.target.value)}})} style={inputStyle}/>
+                </label>
+              </div>
+
             </div>
           )}
-        </div>
 
         <div style={footerStyle}>
           <button onClick={() => onSave(localConfig)} style={saveBtnStyle}>💾 Sauvegarder & Appliquer</button>
