@@ -16,10 +16,14 @@ const DEFAULT_CONFIG = {
     "S": {debut: 15.0, fin: 23.0} 
   },
   CONTRAT: { 
-    MIN_REST_HOURS: 8, // 8h pour permettre Soir -> Matin
+    MIN_REST_HOURS: 8,
     MAX_CONSECUTIVE_SHIFTS: 5, 
     BUFFER_DAYS: 2, 
-    SOLVER_TIME_LIMIT: 10 
+    SOLVER_TIME_LIMIT: 10,
+    // --- NOUVEAUTÉS ---
+    MAX_HOURS_WEEK_CALENDAR: 36,
+    MAX_HOURS_7_ROLLING: 44,
+    REQUIRE_2_CONSECUTIVE_REST_DAYS: true
   }
 };
 
