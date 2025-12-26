@@ -70,12 +70,25 @@ function App() {
     setStatus({type: 'loading', msg: "🚀 Calcul en cours..."});
     
     try {
+// Création du paquet de données
       const payload = {
-        year: Number(year), start_day: Number(startDay), end_day: Number(endDay),
+        year: Number(year),
+        start_day: Number(startDay),
+        end_day: Number(endDay),
+        
+        // 1. La Config (Agents, Horaires...)
         config: { ...config, ANNEE: Number(year) },
-        pre_assignments: preAssignments
+        
+        // 2. LES DÉSIDÉRATAS (C'est cette ligne qui manquait ou était vide !)
+        pre_assignments: preAssignments 
       };
 
+      // --- DEBUG CRITIQUE ---
+      console.log("--- DEBUG AVANT ENVOI ---");
+      console.log("Combien d'agents dans preAssignments ?", Object.keys(preAssignments).length);
+      console.log("Exemple Agent (GAO) :", preAssignments['GAO']);
+      console.log("PAYLOAD FINAL :", payload);
+      // ----------------------
       const response = await axios.post(API_URL, payload);
       
       if (response.data.data && response.data.data.length > 0) {
