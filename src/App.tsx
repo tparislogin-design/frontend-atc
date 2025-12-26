@@ -85,9 +85,9 @@ function App() {
   };
 
   // CALCUL DES DONNÉES À AFFICHER SELON LE MODE
-  const gridData = viewMode === 'planning' 
+const gridData = viewMode === 'planning' 
     ? planning 
-    : convertPreAssignmentsToRows(preAssignments, year, startDay, endDay);
+    : convertPreAssignmentsToRows(preAssignments); // On passe juste les données
 
   return (
     <div style={{maxWidth: 1400, margin: '0 auto', padding: 20, fontFamily: 'sans-serif', background:'#f8fafc', minHeight:'100vh'}}>
