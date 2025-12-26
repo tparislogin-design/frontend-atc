@@ -51,7 +51,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
 
       cols.push({
         field: dayStr, // La clé de donnée correspond au numéro du jour (string)
-        headerName: `${date.getDate()}/${date.getMonth()+1}`, // Ex: 5/1
+        headerName: dayName,
         width: 65,
         headerClass: isWeekend ? 'weekend-header' : '',
         
