@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import PlanningTable from './PlanningTable';
 import ConfigPanel from './ConfigPanel';
+import { parseGoogleSheet } from './utils/sheetParser';
 
-// ✅ TON URL HUGGING FACE
+// ⚠️ TON URL HUGGING FACE
 const API_URL = "https://ttttty-ty.hf.space/api/optimize"; 
 
 const DEFAULT_CONFIG = {
@@ -13,14 +14,14 @@ const DEFAULT_CONFIG = {
   VACATIONS: { 
     "M": {debut: 6.0, fin: 14.0}, 
     "J1": {debut: 7.0, fin: 16.0}, 
-    "S": {debut: 15.0, fin: 23.0} 
+    "S": {debut: 15.0, fin: 23.0},
+    "STAGE": {debut: 9.0, fin: 15.0} // 6h, ignore repos 11h
   },
   CONTRAT: { 
-    MIN_REST_HOURS: 8,
+    MIN_REST_HOURS: 11,
     MAX_CONSECUTIVE_SHIFTS: 5, 
     BUFFER_DAYS: 2, 
     SOLVER_TIME_LIMIT: 10,
-    // --- NOUVEAUTÉS ---
     MAX_HOURS_WEEK_CALENDAR: 36,
     MAX_HOURS_7_ROLLING: 44,
     REQUIRE_2_CONSECUTIVE_REST_DAYS: true
@@ -28,162 +29,91 @@ const DEFAULT_CONFIG = {
 };
 
 function App() {
-  // --- ÉTAT (STATE) ---
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [showConfig, setShowConfig] = useState(false);
-  
   const [year, setYear] = useState(2026);
   const [startDay, setStartDay] = useState(1);
   const [endDay, setEndDay] = useState(28);
-  
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<{type: 'error'|'success'|'loading'|'', msg: string}>({type:'', msg:''});
+  const [status, setStatus] = useState<{type: string, msg: string}>({type:'', msg:''});
   const [planning, setPlanning] = useState<any[]>([]);
+  const [sheetUrl, setSheetUrl] = useState("https://docs.google.com/spreadsheets/d/1lLtFisk983kJ-Yu0rtPyJAoweHxnsKwzen_J1rxsJes/edit");
+  const [preAssignments, setPreAssignments] = useState({});
 
-  // 1. Chargement de la config sauvegardée au démarrage
   useEffect(() => {
-    const savedConfig = localStorage.getItem('tds_config');
-    if (savedConfig) {
-      try {
-        setConfig(JSON.parse(savedConfig));
-      } catch (e) {
-        console.error("Erreur lecture config locale", e);
-      }
-    }
+    const saved = localStorage.getItem('tds_config');
+    if (saved) setConfig(JSON.parse(saved));
   }, []);
 
-  // 2. Fonction pour sauvegarder la config depuis le panneau
-  const handleSaveConfig = (newConfig: any) => {
-    setConfig(newConfig);
-    localStorage.setItem('tds_config', JSON.stringify(newConfig));
-    setShowConfig(false);
-    setStatus({type:'success', msg:'✅ Configuration sauvegardée localement ! Relancez le calcul.'});
+  const handleImport = async () => {
+    setStatus({type:'loading', msg:'Lecture du fichier...'});
+    try {
+        const data = await parseGoogleSheet(sheetUrl, startDay, endDay, year);
+        setPreAssignments(data);
+        setStatus({type:'success', msg: `✅ Import OK pour ${Object.keys(data).length} agents`});
+    } catch (e: any) {
+        setStatus({type:'error', msg: `Erreur import: ${e}`});
+    }
   };
 
-  // 3. Fonction principale : Lancer le calcul
   const handleOptimize = async () => {
     setLoading(true);
-    setStatus({type: 'loading', msg: "🚀 Envoi des données au cerveau IA (Hugging Face)..."});
-    setPlanning([]); // On vide le tableau avant de commencer
-
+    setStatus({type: 'loading', msg: "Calcul en cours..."});
+    setPlanning([]);
     try {
-      // Préparation du paquet à envoyer
-      const payload = {
-        year: Number(year),
-        start_day: Number(startDay),
-        end_day: Number(endDay),
-        // On fusionne la config utilisateur avec l'année sélectionnée
-        config: { ...config, ANNEE: Number(year) } 
-      };
-
-      console.log("📤 Envoi au backend :", payload);
-
-      // Appel API
-      const response = await axios.post(API_URL, payload);
-
-      console.log("📥 Réponse reçue :", response.data);
-
-      // --- VERIFICATION ROBUSTE ---
-      // On vérifie si "data" existe et si c'est une liste non vide.
-      // On ignore le message textuel "status" qui peut varier.
-      const hasData = response.data.data && Array.isArray(response.data.data) && response.data.data.length > 0;
-
-      if (hasData) {
+      const response = await axios.post(API_URL, {
+        year: Number(year), start_day: Number(startDay), end_day: Number(endDay),
+        config: { ...config, ANNEE: Number(year) },
+        pre_assignments: preAssignments
+      });
+      
+      if (response.data.data && response.data.data.length > 0) {
         setPlanning(response.data.data);
-        setStatus({
-            type: 'success', 
-            msg: `✅ Planning généré avec succès ! (${response.data.data.length} lignes récupérées)`
-        });
+        setStatus({type: 'success', msg: `✅ Planning généré !`});
       } else {
-        // Le backend a répondu, mais sans données (Infeasible)
-        console.warn("Réponse vide du backend");
-        setStatus({
-            type: 'error', 
-            msg: "❌ Le moteur a répondu, mais n'a trouvé aucune solution mathématique. Essayez d'assouplir les règles (Config)."
-        });
+        setStatus({type: 'error', msg: "❌ Aucune solution trouvée."});
       }
-
     } catch (error: any) {
-      console.error("ERREUR API :", error);
-      setStatus({type: 'error', msg: `⚠️ Erreur de connexion : ${error.message}`});
+      setStatus({type: 'error', msg: `⚠️ Erreur : ${error.message}`});
     } finally {
       setLoading(false);
     }
   };
 
-  // --- RENDU VISUEL ---
   return (
-    <div className="app-container">
-      
-      {/* MODALE CONFIGURATION */}
-      {showConfig && (
-        <ConfigPanel 
-          config={config} 
-          onSave={handleSaveConfig} 
-          onClose={() => setShowConfig(false)} 
-        />
-      )}
+    <div style={{maxWidth: 1400, margin: '0 auto', padding: 20, fontFamily: 'sans-serif', background:'#f8fafc', minHeight:'100vh'}}>
+        <header style={{display:'flex', justifyContent:'space-between', marginBottom:20, background:'white', padding:15, borderRadius:8, boxShadow:'0 1px 2px rgba(0,0,0,0.1)'}}>
+            <h1 style={{margin:0, color:'#1e293b'}}>✈️ TDS Manager <span style={{fontSize:'0.6em', background:'#2563eb', color:'white', padding:'3px 6px', borderRadius:4}}>PRO</span></h1>
+            <button onClick={() => setShowConfig(true)} style={{background:'white', border:'1px solid #ccc', padding:'8px 12px', borderRadius:6, cursor:'pointer'}}>⚙️ Config</button>
+        </header>
 
-      {/* HEADER */}
-      <header>
-        <div className="logo">
-          ✈️ TDS Manager <span className="badge">CLOUD v2</span>
-        </div>
-        <button 
-          onClick={() => setShowConfig(true)}
-          style={{
-            background:'white', border:'1px solid #cbd5e1', padding:'8px 16px', borderRadius:'6px', 
-            fontWeight:'bold', color:'#475569', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px'
-          }}
-        >
-          ⚙️ Configuration
-        </button>
-      </header>
+        {showConfig && <ConfigPanel config={config} onSave={(c) => {setConfig(c); localStorage.setItem('tds_config', JSON.stringify(c)); setShowConfig(false);}} onClose={() => setShowConfig(false)} />}
 
-      {/* BARRE DE PILOTAGE */}
-      <div className="control-panel">
-        <div className="input-group">
-          <label>Année</label>
-          <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} />
-        </div>
-        <div className="input-group">
-          <label>Jour Début</label>
-          <input type="number" value={startDay} onChange={(e) => setStartDay(Number(e.target.value))} />
-        </div>
-        <div className="input-group">
-          <label>Jour Fin</label>
-          <input type="number" value={endDay} onChange={(e) => setEndDay(Number(e.target.value))} />
+        <div style={{display:'grid', gap:15, background:'white', padding:20, borderRadius:8, boxShadow:'0 1px 3px rgba(0,0,0,0.1)', marginBottom:20}}>
+            <div style={{display:'flex', gap:15, flexWrap:'wrap'}}>
+                <div style={{display:'flex', flexDirection:'column'}}><label style={{fontSize:12, fontWeight:'bold', color:'#64748b'}}>Année</label><input type="number" value={year} onChange={e=>setYear(Number(e.target.value))} style={{padding:8, border:'1px solid #ccc', borderRadius:4}}/></div>
+                <div style={{display:'flex', flexDirection:'column'}}><label style={{fontSize:12, fontWeight:'bold', color:'#64748b'}}>Début</label><input type="number" value={startDay} onChange={e=>setStartDay(Number(e.target.value))} style={{padding:8, border:'1px solid #ccc', borderRadius:4}}/></div>
+                <div style={{display:'flex', flexDirection:'column'}}><label style={{fontSize:12, fontWeight:'bold', color:'#64748b'}}>Fin</label><input type="number" value={endDay} onChange={e=>setEndDay(Number(e.target.value))} style={{padding:8, border:'1px solid #ccc', borderRadius:4}}/></div>
+            </div>
+            
+            <div style={{display:'flex', gap:10, alignItems:'center', background:'#f0fdf4', padding:10, borderRadius:6, border:'1px solid #bbf7d0'}}>
+                <input type="text" value={sheetUrl} onChange={e=>setSheetUrl(e.target.value)} style={{flex:1, padding:8, border:'1px solid #16a34a', borderRadius:4}} />
+                <button onClick={handleImport} style={{background:'#16a34a', color:'white', border:'none', padding:'8px 15px', borderRadius:4, cursor:'pointer'}}>📥 Importer</button>
+            </div>
+
+            <div style={{textAlign:'right'}}>
+                <button onClick={handleOptimize} disabled={loading} style={{background: loading?'#ccc':'#2563eb', color:'white', border:'none', padding:'12px 24px', borderRadius:6, fontWeight:'bold', cursor:'pointer'}}>
+                    {loading ? 'Calcul...' : '⚡ LANCER'}
+                </button>
+            </div>
         </div>
 
-        <div style={{flex: 1, display: 'flex', justifyContent: 'flex-end'}}>
-          <button className="btn-primary" onClick={handleOptimize} disabled={loading}>
-            {loading ? 'Calcul en cours...' : '⚡ LANCER L\'OPTIMISATION'}
-          </button>
+        {status.msg && <div style={{marginBottom:20, padding:15, borderRadius:6, background: status.type==='error'?'#fef2f2':'#f0fdf4', color: status.type==='error'?'#991b1b':'#166534', border: status.type==='error'?'1px solid #fecaca':'1px solid #bbf7d0'}}>{status.msg}</div>}
+
+        <div style={{background:'white', padding:10, borderRadius:8, boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}}>
+            {planning.length > 0 ? <PlanningTable data={planning} year={year} /> : <div style={{padding:50, textAlign:'center', color:'#ccc'}}>Aucun planning.</div>}
         </div>
-      </div>
-
-      {/* ZONE DE MESSAGES */}
-      {status.msg && (
-        <div className={`status-box status-${status.type}`}>
-          {status.msg}
-        </div>
-      )}
-
-      {/* TABLEAU DE RÉSULTAT */}
-      <div className="result-area">
-        {planning.length > 0 ? (
-          <PlanningTable data={planning} year={year} />
-        ) : (
-          <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '400px', color: '#cbd5e1', flexDirection: 'column'}}>
-            <div style={{fontSize: '4rem', marginBottom: '20px'}}>📅</div>
-            <div>Le planning apparaîtra ici.</div>
-            <div style={{fontSize: '0.8rem', marginTop: '10px'}}>(Assurez-vous que le backend Hugging Face est réveillé)</div>
-          </div>
-        )}
-      </div>
-
     </div>
   );
 }
-
 export default App;
