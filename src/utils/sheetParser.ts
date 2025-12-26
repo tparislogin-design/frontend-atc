@@ -79,10 +79,17 @@ export const parseGoogleSheet = async (url: string, startDay: number, endDay: nu
                     
                     parts.forEach(p => {
                         if (p === "") return;
-                        // MODIFICATION ICI : On garde le code original s'il est inconnu
-                        if (KNOWN_CODES[p]) shifts.push(...KNOWN_CODES[p]);
-                        else shifts.push(p); // Ex: FSAU est gardé comme "FSAU"
+                        
+                        // Si le code est connu (M, J1, S...), on prend sa valeur standard
+                        if (KNOWN_CODES[p]) {
+                            shifts.push(...KNOWN_CODES[p]);
+                        } 
+                        // SINON : On garde le code EXACT du fichier (ex: FSAU, B, ANG...)
+                        else {
+                            shifts.push(p); 
+                        }
                     });
+                    
                     
                     if (shifts.length > 0) preAssignments[agentName][dayNum] = [...new Set(shifts)];
                 }
