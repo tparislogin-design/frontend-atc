@@ -58,7 +58,8 @@ function App() {
   const handleImport = async () => {
     setStatus({type:'loading', msg:'📡 Connexion au Google Sheet...'});
     try {
-        const data = await parseGoogleSheet(sheetUrl, startDay, endDay, year);
+        // On retire "year" des parenthèses
+      const data = await parseGoogleSheet(sheetUrl, startDay, endDay);  
         setPreAssignments(data);
         const nbAgents = Object.keys(data).length;
         setStatus({type:'success', msg: `✅ Import réussi ! ${nbAgents} agents trouvés avec des contraintes.`});
