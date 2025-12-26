@@ -55,7 +55,7 @@ export const parseGoogleSheet = async (url: string, startDay: number, endDay: nu
         }
         resolve(preAssignments);
       },
-      error: (err) => reject(err)
+      error: (err: any) => reject(err)
     });
   });
 };

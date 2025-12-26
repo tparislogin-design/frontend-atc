@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { decimalToTime, timeToDecimal } from './utils';
+import { decimalToTime, timeToDecimal } from './utils/utils';
 
 interface ConfigPanelProps {
   config: any;
