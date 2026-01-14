@@ -6,30 +6,38 @@ import type { ColDef } from 'ag-grid-community';
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-balham.css";
 
+// Enregistrement des modules Community
 ModuleRegistry.registerModules([ AllCommunityModule ]);
 
-// --- 1. HEADER PERSONNALISÉ (Identique à avant) ---
+// --- 1. COMPOSANT EN-TÊTE PERSONNALISÉ ---
 const CustomHeader = (props: any) => {
     const { displayName, dayNum, fullDate } = props;
-    // Note: Pour coller à ta capture, j'ai mis des exemples de besoins rouges plus réalistes
-    // Idéalement, ça viendra du backend plus tard.
+    
+    // MOCK : Liste des vacations requises (Simulé pour le visuel V2.1)
+    // Plus tard, ces infos pourront venir des props ou du contexte
     const requiredShifts = ['J3', 'M', 'J1']; 
 
     return (
-        <div style={{display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', paddingTop: 5}}>
-            <div style={{fontSize: 10, fontWeight: 'bold', color: '#64748b', textTransform:'uppercase'}}>
+        <div style={{display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', paddingTop: 6, boxSizing:'border-box'}}>
+            {/* Jour Semaine (LUN, MAR...) */}
+            <div style={{fontSize: 10, fontWeight: '700', color: '#64748b', textTransform:'uppercase', lineHeight:'1.2'}}>
                 {displayName.substring(0, 2)}
             </div>
-            <div style={{fontSize: 12, fontWeight: '800', color: '#1e293b'}}>
+            
+            {/* Numéro Jour (1, 2, 365...) */}
+            <div style={{fontSize: 13, fontWeight: '800', color: '#1e293b', lineHeight:'1.4'}}>
                 {dayNum}
             </div>
-            <div style={{fontSize: 10, color: '#94a3b8', marginBottom: 4}}>
+
+            {/* Date (01/01) */}
+            <div style={{fontSize: 10, color: '#94a3b8', marginBottom: 6}}>
                 {fullDate}
             </div>
-            {/* Liste Rouge Verticale */}
-            <div style={{display:'flex', flexDirection:'column', gap: 0, marginTop: 'auto', paddingBottom: 4}}>
+
+            {/* Liste Verticale Rouge (Besoins) */}
+            <div style={{display:'flex', flexDirection:'column', gap: 1, marginTop: 'auto', paddingBottom: 6}}>
                 {requiredShifts.map((code, idx) => (
-                    <span key={idx} style={{fontSize: 9, color: '#ef4444', fontWeight: 'bold', lineHeight: '11px', textAlign:'center'}}>
+                    <span key={idx} style={{fontSize: 9, color: '#ef4444', fontWeight: '700', lineHeight: '11px', textAlign:'center'}}>
                         {code}
                     </span>
                 ))}
@@ -38,33 +46,37 @@ const CustomHeader = (props: any) => {
     );
 };
 
-// --- 2. CELLULE AGENT (Identique à avant) ---
+// --- 2. COMPOSANT CELLULE AGENT ---
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
-    // Mock data pour coller à ta capture
+    
+    // MOCK : Logique de statut pour la démo visuelle
     const isBureau = ['GNC'].includes(agentName);
     const isParite = ['WBR', 'PLC', 'KGR', 'FRD'].includes(agentName);
     
-    // Exemple de stats comme sur la capture (mocké)
+    // MOCK : Stats d'heures ou de tours
     const stats = "9 / 12"; 
 
     return (
-        <div style={{display:'flex', flexDirection:'column', justifyContent:'center', height:'100%', paddingLeft: 5}}>
+        <div style={{display:'flex', flexDirection:'column', justifyContent:'center', height:'100%', paddingLeft: 8}}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <span style={{fontWeight:'bold', fontSize: 12, color: '#334155'}}>{agentName}</span>
-                <div style={{display:'flex', gap:3, marginRight: 5}}>
-                    {isParite && <div style={{width:6, height:6, borderRadius:'50%', background:'#3b82f6'}}></div>}
-                    {isBureau && <div style={{width:6, height:6, borderRadius:'50%', background:'#ef4444'}}></div>}
+                <span style={{fontWeight:'700', fontSize: 13, color: '#334155'}}>{agentName}</span>
+                
+                {/* Puces de statut */}
+                <div style={{display:'flex', gap:4, marginRight: 8}}>
+                    {isParite && <div style={{width:6, height:6, borderRadius:'50%', background:'#3b82f6'}} title="Parité"></div>}
+                    {isBureau && <div style={{width:6, height:6, borderRadius:'50%', background:'#ef4444'}} title="Bureau"></div>}
                 </div>
             </div>
-            <div style={{fontSize: 9, color: '#3b82f6', fontWeight: 600}}>
+            {/* Compteur sous le nom */}
+            <div style={{fontSize: 10, color: '#3b82f6', fontWeight: 600, marginTop: 2}}>
                 {stats}
             </div>
         </div>
     );
 };
 
-// --- 3. NOUVEAU : CELLULE "PASTILLE" (Badge) ---
+// --- 3. COMPOSANT CELLULE VACATION (BADGES) ---
 const ShiftCellRenderer = (props: any) => {
     const val = props.value;
 
@@ -115,13 +127,14 @@ const ShiftCellRenderer = (props: any) => {
                 backgroundColor: style.bg,
                 color: style.color,
                 border: `1px solid ${style.border}`,
-                borderRadius: '6px', // Arrondi comme sur la capture
-                padding: '2px 8px', // Espace intérieur
+                borderRadius: '6px',
+                padding: '2px 0',
                 fontSize: '11px',
                 fontWeight: '700',
-                minWidth: '24px', // Largeur min pour que les pastilles soient jolies
+                width: '32px', // Largeur fixe pour uniformité
                 textAlign: 'center',
-                boxShadow: '0 1px 1px rgba(0,0,0,0.02)' // Légère ombre subtile
+                boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                display: 'inline-block'
             }}>
                 {val}
             </span>
@@ -142,11 +155,12 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
   data, year, startDay, endDay, isDesiderataView = false 
 }) => {
 
+  // Déclaration des composants personnalisés
   const components = useMemo(() => {
       return {
           agColumnHeader: CustomHeader,
           agentCellRenderer: AgentCellRenderer,
-          shiftCellRenderer: ShiftCellRenderer // Enregistrement du nouveau renderer
+          shiftCellRenderer: ShiftCellRenderer
       };
   }, []);
 
@@ -156,13 +170,15 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
       field: 'Agent', 
       headerName: 'CONTRÔLEUR',
       pinned: 'left', 
-      width: 120,
+      width: 140, // Un peu plus large pour le confort
       cellRenderer: 'agentCellRenderer',
-      cellStyle: { backgroundColor: '#f8fafc', borderRight: '1px solid #e2e8f0', display:'flex', alignItems:'center' }
+      cellStyle: { backgroundColor: '#f8fafc', borderRight: '1px solid #e2e8f0', display:'flex', alignItems:'center', padding:0 }
     }];
 
-    // 2. Génération des Jours
+    // 2. Génération des Colonnes Jours
     const daysRange: number[] = [];
+    
+    // Logique pour gérer le passage d'année (ex: 365 -> 28)
     if (startDay <= endDay) {
         for (let i = startDay; i <= endDay; i++) daysRange.push(i);
     } else {
@@ -172,32 +188,41 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
 
     daysRange.forEach(dayNum => {
       const dayStr = dayNum.toString();
+      
+      // Calcul de l'année réelle pour l'affichage de la date
       let currentYear = year;
       if (startDay > endDay && dayNum >= startDay) currentYear = year - 1; 
       
       const date = new Date(currentYear, 0, dayNum); 
       const dayName = date.toLocaleDateString('fr-FR', { weekday: 'short' });
       const dateStr = date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+      
+      // Weekends (Samedi=6, Dimanche=0)
+      const isWeekend = date.getDay() === 0 || date.getDay() === 6;
 
       cols.push({
         field: dayStr,
-        width: 50, // Ajusté pour bien contenir la pastille
+        width: 52, // Largeur optimisée pour les badges
+        
+        // Params passés au Header Custom
         headerComponentParams: {
             displayName: dayName,
             dayNum: dayNum,
             fullDate: dateStr
         },
-        cellRenderer: 'shiftCellRenderer', // Utilisation de la pastille
         
-        // Style de base de la cellule (le conteneur)
+        cellRenderer: 'shiftCellRenderer',
+        
+        // Styles de la case (conteneur)
         cellStyle: { 
             display: 'flex', 
             justifyContent: 'center', 
             alignItems: 'center', 
-            borderRight: '1px solid #f8fafc', // Séparateur très léger
-            padding: 0
+            borderRight: '1px solid #f1f5f9', // Séparateur très subtil
+            padding: 0,
+            backgroundColor: isWeekend ? '#fdfdfd' : 'white' // Fond très légèrement différent WE
         },
-        editable: false // On désactive l'édition directe pour le moment pour profiter du renderer
+        editable: false // Désactivé pour l'instant pour privilégier l'affichage badge
       });
     });
     return cols;
@@ -205,15 +230,25 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
 
   return (
     <div className="ag-theme-balham" style={{ height: '100%', width: '100%' }}>
+      
+      {/* Styles CSS injectés pour surcharger Ag-Grid et avoir le look "Clean" */}
       <style>{`
+        /* Reset des paddings headers */
         .ag-theme-balham .ag-header-cell { padding: 0 !important; }
         .ag-theme-balham .ag-header-cell-label { width: 100%; height: 100%; padding: 0; }
+        
+        /* Suppression des bordures par défaut pour un look plus "air" */
         .ag-theme-balham .ag-root-wrapper { border: none; }
+        
+        /* Lignes et Headers */
+        .ag-theme-balham .ag-header { border-bottom: 1px solid #e2e8f0; background-color: white; }
         .ag-theme-balham .ag-row { border-bottom-color: #f1f5f9; }
-        .ag-theme-balham .ag-header { border-bottom-color: #e2e8f0; background-color: white; }
-        /* Alternance très légère des lignes pour la lisibilité */
-        .ag-theme-balham .ag-row-odd { background-color: #ffffff; }
-        .ag-theme-balham .ag-row-even { background-color: #fafafa; }
+        
+        /* Header Fixe Agent */
+        .ag-theme-balham .ag-pinned-left-header { border-right: 1px solid #e2e8f0; }
+
+        /* Couleur de sélection (si on clique sur une case) */
+        .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; }
       `}</style>
 
       <AgGridReact 
@@ -224,10 +259,10 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
             resizable: true, 
             sortable: false, 
             filter: false,
-            //suppressMenu: true
+           // suppressMenu: true // Indispensable pour notre header custom
         }}
-        headerHeight={140} 
-        rowHeight={50} // Un peu plus haut pour laisser respirer les pastilles
+        headerHeight={140} // Hauteur suffisante pour les 4 niveaux d'infos
+        rowHeight={50}     // Hauteur suffisante pour les badges
       />
     </div>
   );

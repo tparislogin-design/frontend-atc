@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import PlanningTable from './PlanningTable';
+import Bilan from './Bilan'; // L'import est ici
 import { parseGoogleSheet } from './utils/sheetParser';
 import { convertPreAssignmentsToRows } from './utils/dataConverters';
 
@@ -32,7 +33,7 @@ function App() {
   
   // Paramètres UI directs
   const [year, setYear] = useState(2026);
-  const [startDay, setStartDay] = useState(365); // Exemple de la capture (fin d'année précédente)
+  const [startDay, setStartDay] = useState(365); 
   const [endDay, setEndDay] = useState(28);
   const [sheetUrl, setSheetUrl] = useState("https://docs.google.com/spreadsheets/d/1lLtFisk983kJ-Yu0rtPyJAoweHxnsKwzen_J1rxsJes/edit");
   
@@ -56,7 +57,7 @@ function App() {
   const handleImport = async () => {
     setStatus({type:'loading', msg:'📡 Lecture...'});
     try {
-        const data = await parseGoogleSheet(sheetUrl, startDay, endDay); // Note: logique de loop 365->1 à gérer dans parseGoogleSheet si besoin
+        const data = await parseGoogleSheet(sheetUrl, startDay, endDay); 
         setPreAssignments(data);
         setStatus({type:'success', msg: `✅ Import OK (${Object.keys(data).length} agents)`});
         setActiveTab('desiderata');
@@ -92,7 +93,7 @@ function App() {
     }
   };
 
-  // Sélection des données à afficher
+  // Sélection des données à afficher pour la grille
   const gridData = activeTab === 'desiderata' 
     ? convertPreAssignmentsToRows(preAssignments)
     : planning;
@@ -158,9 +159,10 @@ function App() {
         {/* --- 2. MAIN LAYOUT (GRID + SIDEBAR) --- */}
         <div style={{flex: 1, display: 'flex', overflow: 'hidden'}}>
             
-            {/* GAUCHE : GRILLE AG-GRID */}
+            {/* GAUCHE : ZONE PRINCIPALE */}
             <div style={{flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column'}}>
-                {/* Barre de Status (si message) */}
+                
+                {/* Barre de Status */}
                 {status.msg && (
                     <div style={{
                         padding: '8px 16px', fontSize: 13, fontWeight: 500, borderBottom: '1px solid #e2e8f0',
@@ -171,24 +173,39 @@ function App() {
                     </div>
                 )}
 
-                {/* Composant Grille */}
-                <div style={{flex: 1, width: '100%', height: '100%'}}>
-                   {/* On passe le zoomLevel plus tard au composant */}
-                   <PlanningTable 
-                        data={gridData} 
-                        year={year} 
-                        startDay={startDay} 
-                        endDay={endDay} 
-                        isDesiderataView={activeTab === 'desiderata'}
-                        // Prop temporaire pour simuler le zoom via CSS transform ou props AgGrid plus tard
-                    />
+                {/* CONTENU VARIABLE SELON L'ONGLET */}
+                <div style={{flex: 1, width: '100%', height: '100%', background: '#fff'}}>
+                    
+                   {/* VUE GRILLE (PLANNING OU DESIDERATA) */}
+                   {(activeTab === 'planning' || activeTab === 'desiderata') && (
+                       <PlanningTable 
+                            data={gridData} 
+                            year={year} 
+                            startDay={startDay} 
+                            endDay={endDay} 
+                            isDesiderataView={activeTab === 'desiderata'}
+                        />
+                   )}
+
+                   {/* VUE BILAN (C'est ici que le composant est utilisé !) */}
+                   {activeTab === 'bilan' && (
+                       <Bilan planning={planning} config={config} />
+                   )}
+                   
+                   {/* VUE CONFIG (Contenu simple, car la sidebar fait le reste) */}
+                   {activeTab === 'config' && (
+                       <div style={{padding:40, textAlign:'center', color:'#94a3b8'}}>
+                           Utilisez le panneau latéral droit pour modifier la configuration.
+                       </div>
+                   )}
+
                 </div>
             </div>
 
             {/* DROITE : SIDEBAR CONFIGURATION */}
             <div style={{
                 width: 340, background: 'white', borderLeft: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column',
-                overflowY: 'auto'
+                overflowY: 'auto', flexShrink: 0
             }}>
                 
                 {/* Section 1: Source */}
@@ -225,6 +242,7 @@ function App() {
 
                     <div style={{height:1, background:'#f1f5f9', margin:'10px 0'}}></div>
 
+                 
                     <div style={rowStyle}>
                         <label style={labelStyle}>Max Heures (7j glissants)</label>
                         <input type="number" value={config.CONTRAT.MAX_HOURS_7_ROLLING} style={numberInputStyle} disabled/>
