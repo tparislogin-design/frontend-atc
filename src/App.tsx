@@ -3,9 +3,7 @@ import axios from 'axios';
 import PlanningTable from './PlanningTable';
 import ConfigPanel from './ConfigPanel';
 import { parseGoogleSheet } from './utils/sheetParser';
-// Note : convertPreAssignmentsToRows n'est plus strictement nécessaire ici car on fait le mapping manuellement
-// mais je le laisse au cas où d'autres parties du code l'utiliseraient.
-//import { convertPreAssignmentsToRows } from './utils/dataConverters';
+import { convertPreAssignmentsToRows } from './utils/dataConverters';
 
 // ⚠️ TON URL HUGGING FACE
 const API_URL = "https://ttttty-ty.hf.space/api/optimize"; 
@@ -72,18 +70,25 @@ function App() {
     setStatus({type: 'loading', msg: "🚀 Calcul en cours..."});
     
     try {
-      // Création du paquet de données
+// Création du paquet de données
       const payload = {
         year: Number(year),
         start_day: Number(startDay),
         end_day: Number(endDay),
+        
+        // 1. La Config (Agents, Horaires...)
         config: { ...config, ANNEE: Number(year) },
+        
+        // 2. LES DÉSIDÉRATAS (C'est cette ligne qui manquait ou était vide !)
         pre_assignments: preAssignments 
       };
 
+      // --- DEBUG CRITIQUE ---
       console.log("--- DEBUG AVANT ENVOI ---");
       console.log("Combien d'agents dans preAssignments ?", Object.keys(preAssignments).length);
-      
+      console.log("Exemple Agent (GAO) :", preAssignments['GAO']);
+      console.log("PAYLOAD FINAL :", payload);
+      // ----------------------
       const response = await axios.post(API_URL, payload);
       
       if (response.data.data && response.data.data.length > 0) {
@@ -100,29 +105,10 @@ function App() {
     }
   };
 
-  // --- CONSTRUCTION DES DONNÉES (CORRECTION ICI) ---
-  // On se base sur les clés de l'import (preAssignments) pour avoir la liste des agents
-  const gridData = Object.keys(preAssignments).length > 0 
-    ? Object.keys(preAssignments).map(agentName => {
-        let rowContent = {};
-
-        if (viewMode === 'planning' && planning.length > 0) {
-            // En mode Planning : on cherche le résultat de l'API pour cet agent
-            const found = planning.find((p: any) => p.name === agentName || p.agent === agentName);
-            // Si trouvé on l'utilise, sinon rowContent reste vide (ce qui affichera des cases vides, mais avec le bon Nom)
-            if (found) rowContent = found;
-        } else {
-            // En mode Désidérata : on prend les données importées
-            rowContent = preAssignments[agentName];
-        }
-
-        // On retourne un objet qui a OBLIGATOIREMENT la propriété 'name'
-        return {
-            name: agentName, 
-            ...rowContent
-        };
-    })
-    : []; // Si aucun import fait, tableau vide
+  // Sélection des données à afficher
+  const gridData = viewMode === 'planning' 
+    ? planning 
+    : convertPreAssignmentsToRows(preAssignments);
 
   return (
     <div style={{maxWidth: 1400, margin: '0 auto', padding: 20, fontFamily: 'sans-serif', background:'#f8fafc', minHeight:'100vh'}}>
@@ -175,9 +161,7 @@ function App() {
                 year={year} 
                 startDay={startDay} 
                 endDay={endDay} 
-                isDesiderataView={viewMode === 'desiderata'}
-                // On passe les vacations dynamiquement pour les alertes rouges 
-                possibleVacations={Object.keys(config.VACATIONS)}
+                isDesiderataView={viewMode === 'desiderata'} 
             />
         </div>
     </div>
