@@ -23,7 +23,8 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
 }) => {
 
   // --- 1. GÉNÉRATION DES JOURS ---
-  const days = [];
+  const days: { index: number; obj: Date; dayNum: number; month: number; weekday: string; dateStr: string }[] = []; 
+  
   for (let i = startDay; i <= endDay; i++) {
     // Gestion du chevauchement d'année (si > 365 ou 366)
     // Astuce : On crée une date à partir du 1er Janvier + (i - 1) jours
