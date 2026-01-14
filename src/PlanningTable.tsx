@@ -1,115 +1,199 @@
-import React, { useMemo } from 'react';
-import { AgGridReact } from 'ag-grid-react';
-
-// CORRECTION ICI : J'ai retiré "CellClassParams" qui ne servait plus
-import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community'; 
-import type { ColDef } from 'ag-grid-community'; 
-
-import "ag-grid-community/styles/ag-grid.css";
-import "ag-grid-community/styles/ag-theme-balham.css";
-
-ModuleRegistry.registerModules([ AllCommunityModule ]);
+import React from 'react';
 
 interface PlanningTableProps {
   data: any[];
   year: number;
   startDay: number;
   endDay: number;
-  isDesiderataView?: boolean;
+  isDesiderataView: boolean;
+  // Nous avons besoin de la liste des vacations possibles pour calculer ce qui manque
+  // Si tu ne veux pas passer la config, on peut utiliser une liste en dur ici :
+  possibleVacations?: string[]; 
 }
 
+const DEFAULT_VACATIONS = ['M', 'J1', 'J2', 'J3', 'S']; // Liste par défaut à adapter selon tes besoins
+
 const PlanningTable: React.FC<PlanningTableProps> = ({ 
-  data, year, startDay, endDay, isDesiderataView = false 
+  data, 
+  year, 
+  startDay, 
+  endDay, 
+  isDesiderataView,
+  possibleVacations = DEFAULT_VACATIONS 
 }) => {
 
-  const columnDefs = useMemo<ColDef[]>(() => {
-    // 1. Colonne Agent
-    const cols: ColDef[] = [{
-      field: 'Agent', 
-      pinned: 'left', 
-      width: 110,
-      cellStyle: { fontWeight: 'bold', backgroundColor: '#f8fafc', borderRight: '2px solid #ccc' }
-    }];
-
-    // 2. Génération des Jours
-    const daysRange: number[] = [];
+  // --- 1. GÉNÉRATION DES JOURS ---
+  const days = [];
+  for (let i = startDay; i <= endDay; i++) {
+    // Gestion du chevauchement d'année (si > 365 ou 366)
+    // Astuce : On crée une date à partir du 1er Janvier + (i - 1) jours
+    const date = new Date(year, 0, i);
     
-    if (startDay <= endDay) {
-        for (let i = startDay; i <= endDay; i++) daysRange.push(i);
-    } else {
-        for (let i = startDay; i <= 365; i++) daysRange.push(i);
-        for (let i = 1; i <= endDay; i++) daysRange.push(i);
-    }
-
-    daysRange.forEach(dayNum => {
-      const dayStr = dayNum.toString();
-      const date = new Date(year, 0, dayNum); 
-      const dayName = date.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit' });
-      const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-
-      cols.push({
-        field: dayStr,
-        headerName: dayName,
-        width: 65,
-        headerClass: isWeekend ? 'weekend-header' : '',
-        editable: true,
-        
-        // On utilise "any" ici, donc CellClassParams n'est plus nécessaire
-        cellStyle: (params: any): any => {
-          const val = params.value;
-          const base = { textAlign: 'center', borderRight: '1px solid #eee' };
-
-          // --- MODE DÉSIDÉRATA ---
-          if (isDesiderataView) {
-              if (!val) return base;
-              return { 
-                  ...base, 
-                  backgroundColor: '#fffbeb', color: '#b45309', 
-                  fontStyle: 'italic', fontSize: '0.85em'
-              };
-          }
-
-          // --- MODE PLANNING ---
-          if (val === 'M') return { ...base, backgroundColor: '#fff7ed', color: '#9a3412', fontWeight: 'bold' };
-          if (['J1', 'J2', 'J3'].includes(val)) return { ...base, backgroundColor: '#f0fdf4', color: '#166534', fontWeight: 'bold' };
-          if (['A1', 'A2'].includes(val)) return { ...base, backgroundColor: '#eff6ff', color: '#1e40af', fontWeight: 'bold' };
-          if (val === 'S') return { ...base, backgroundColor: '#fef2f2', color: '#991b1b', fontWeight: 'bold' };
-          
-          if (val === 'OFF') return { ...base, backgroundColor: '#ffffff', color: '#cbd5e1', fontSize: '0.8em' };
-          if (val === 'C') return { ...base, backgroundColor: '#e2e8f0', color: '#475569', fontStyle: 'italic', fontWeight: 'bold' };
-          
-          if (val && val !== '') {
-              return { 
-                  ...base, 
-                  backgroundColor: '#f3e8ff', 
-                  color: '#6b21a8',           
-                  fontWeight: 'bold', 
-                  borderLeft: '3px solid #a855f7' 
-              };
-          }
-          
-          return base;
-        }
-      });
+    days.push({
+      index: i, // Le numéro utilisé dans les données (day_1, day_365...)
+      obj: date,
+      dayNum: date.getDate(),
+      month: date.getMonth() + 1,
+      weekday: date.toLocaleDateString('fr-FR', { weekday: 'short' }).toUpperCase().replace('.', '').substring(0, 2), // LU, MA...
+      dateStr: date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) // 01/01
     });
-    return cols;
-  }, [year, startDay, endDay, isDesiderataView]);
+  }
+
+  // --- 2. LOGIQUE DES VACATIONS MANQUANTES ---
+  const getMissingShifts = (dayIndex: number) => {
+    if (isDesiderataView) return []; // Pas d'alerte en mode désidérata
+
+    // 1. Récupérer toutes les vacations posées ce jour-là par n'importe quel agent
+    const assignedShifts = new Set();
+    data.forEach(agentRow => {
+      // On suppose que la clé dans tes données est 'day_X' ou juste 'X'
+      // Adapte 'val' selon la structure exacte renvoyée par ton API
+      const val = agentRow[`day_${dayIndex}`] || agentRow[dayIndex]; 
+      if (val) assignedShifts.add(val);
+    });
+
+    // 2. Vérifier lesquelles manquent
+    return possibleVacations.filter(vac => !assignedShifts.has(vac));
+  };
 
   return (
-    <div className="ag-theme-balham" style={{ height: 600, width: '100%' }}>
-      <AgGridReact 
-        rowData={data || []} 
-        columnDefs={columnDefs} 
-        defaultColDef={{ 
-            resizable: true, 
-            sortable: false, 
-            filter: false 
-        }}
-        headerHeight={40} 
-        rowHeight={35} 
-      />
+    <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+      <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: '0.85rem' }}>
+        
+        {/* --- HEADER --- */}
+        <thead>
+          {/* LIGNE 1 : Jours Semaine (LU, MA...) */}
+          <tr>
+            <th style={{ ...stickyColStyle, borderBottom: 'none' }} rowSpan={4}>CONTRÔLEUR</th>
+            {days.map(d => (
+              <th key={`wd-${d.index}`} style={headerCellStyle}>
+                {d.weekday}
+              </th>
+            ))}
+          </tr>
+
+          {/* LIGNE 2 : Numéro du jour dans l'année (1, 365...) */}
+          <tr>
+            {days.map(d => (
+              <th key={`idx-${d.index}`} style={{ ...headerCellStyle, fontSize: '1.1em', color: '#1e293b' }}>
+                {/* On gère l'affichage '365' ou '1' selon l'année */}
+                {d.index > 365 ? d.index - 365 : d.index} 
+              </th>
+            ))}
+          </tr>
+
+          {/* LIGNE 3 : La Date (01/01...) */}
+          <tr>
+            {days.map(d => (
+              <th key={`date-${d.index}`} style={{ ...headerCellStyle, color: '#64748b', fontWeight: 'normal', fontSize: '0.75em' }}>
+                {d.dateStr}
+              </th>
+            ))}
+          </tr>
+
+          {/* LIGNE 4 : LES ALERTES ROUGES (Vacations manquantes) */}
+          <tr style={{ height: 60 }}>
+            {days.map(d => {
+              const missing = getMissingShifts(d.index);
+              return (
+                <th key={`alert-${d.index}`} style={{ ...headerCellStyle, borderBottom: '2px solid #cbd5e1', verticalAlign: 'top', paddingTop: 5 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {missing.map(m => (
+                      <span key={m} style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.75em' }}>{m}</span>
+                    ))}
+                  </div>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+
+        {/* --- CORPS DU TABLEAU --- */}
+        <tbody>
+          {data.map((row, rIdx) => (
+            <tr key={rIdx} style={{ backgroundColor: rIdx % 2 === 0 ? 'white' : '#f8fafc' }}>
+              {/* Colonne Nom Agent */}
+              <td style={{ ...stickyColStyle, fontWeight: 'bold', color: '#334155' }}>
+                {row.name || row.agent || "Inconnu"}
+              </td>
+
+              {/* Cellules Planning */}
+              {days.map(d => {
+                const val = row[`day_${d.index}`] || row[d.index] || "";
+                return (
+                  <td key={d.index} style={cellStyle}>
+                    {val && (
+                      <span style={{ 
+                        ...badgeStyle, 
+                        backgroundColor: getBadgeColor(val, isDesiderataView) 
+                      }}>
+                        {val}
+                      </span>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
+};
+
+// --- STYLES ET UTILITAIRES ---
+
+const stickyColStyle: React.CSSProperties = {
+  position: 'sticky',
+  left: 0,
+  backgroundColor: 'white',
+  zIndex: 10,
+  padding: '8px 12px',
+  borderRight: '2px solid #e2e8f0',
+  borderBottom: '1px solid #e2e8f0',
+  textAlign: 'left',
+  minWidth: 120
+};
+
+const headerCellStyle: React.CSSProperties = {
+  padding: '4px',
+  textAlign: 'center',
+  borderRight: '1px solid #f1f5f9',
+  backgroundColor: '#f8fafc',
+  minWidth: 45,
+  color: '#94a3b8',
+  fontWeight: 'bold'
+};
+
+const cellStyle: React.CSSProperties = {
+  textAlign: 'center',
+  padding: '6px',
+  borderRight: '1px solid #f1f5f9',
+  borderBottom: '1px solid #f1f5f9'
+};
+
+const badgeStyle: React.CSSProperties = {
+  display: 'inline-block',
+  padding: '4px 8px',
+  borderRadius: 4,
+  fontSize: '0.85em',
+  fontWeight: 'bold',
+  minWidth: 20
+};
+
+// Fonction simple pour colorer les cellules
+const getBadgeColor = (val: string, isDesiderata: boolean) => {
+    if (isDesiderata) return '#e2e8f0'; // Gris pour les désidératas
+    
+    // Couleurs spécifiques pour le planning final
+    const colors: any = {
+        'M': '#dbeafe', // Bleu clair
+        'J1': '#dcfce7', // Vert clair
+        'S': '#fef9c3', // Jaune clair
+        'CA': '#fee2e2', // Rouge (Congés)
+        'RH': '#f3f4f6'  // Gris (Repos)
+    };
+    return colors[val] || '#f1f5f9';
 };
 
 export default PlanningTable;
