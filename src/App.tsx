@@ -10,27 +10,31 @@ import { parseGoogleSheet } from './utils/sheetParser';
 import { convertPreAssignmentsToRows } from './utils/dataConverters';
 import { decimalToTime, timeToDecimal } from './utils/timeConverters';
 
-// Import de TYPE (Correction ici)
+// Import de TYPE
 import type { AppConfig } from './utils/types';
 
 const API_URL = "https://ttttty-ty.hf.space/api/optimize"; 
 
+// --- CONFIGURATION PAR DÉFAUT ---
 const DEFAULT_CONFIG: AppConfig = {
   ANNEE: 2026,
   CONTROLEURS: ["GAO", "WBR", "PLC", "CML", "BBD", "LAK", "MZN", "TRT", "CLO", "LNN", "KGR", "FRD", "DAZ", "GNC", "DTY", "JCT"],
-  CONTROLLERS_AFFECTES_BUREAU: ["GNC"],
+  CONTROLLERS_AFFECTES_BUREAU: [],
   VACATIONS: { 
-    "M": {debut: 5.75, fin: 12.75}, 
-    "J1": {debut: 7.5, fin: 15.5}, 
-    "J2": {debut: 8.0, fin: 16.0}, 
-    "S": {debut: 15.0, fin: 23.0},
+    "M":  { debut: 5.5, fin: 12.75 },
+    "J1": { debut: 7.5, fin: 15.5 },
+    "J2": { debut: 8.0, fin: 16.0 },
+    "S":  { debut: 16.75, fin: 23.5 },
+    "A1": { debut: 13.0, fin: 22.0 },
+    "A2": { debut: 15.0, fin: 23.0 }
   },
   CONTRAT: { 
     MIN_REST_HOURS: 11,
     MAX_CONSECUTIVE_SHIFTS: 4, 
     MAX_HOURS_WEEK_CALENDAR: 32,
     MAX_HOURS_7_ROLLING: 44,
-    MAX_BACKTRACKS: 10
+    MAX_BACKTRACKS: 10,
+    SOLVER_TIME_LIMIT: 25
   }
 };
 
@@ -67,6 +71,7 @@ const TimeInput = ({ val, onSave }: { val: number, onSave: (v: number) => void }
 function App() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   
+  // États locaux pour le formulaire de calcul
   const [year, setYear] = useState(2026);
   const [startDay, setStartDay] = useState(365); 
   const [endDay, setEndDay] = useState(28);
@@ -80,29 +85,51 @@ function App() {
   const [activeTab, setActiveTab] = useState<'planning' | 'desiderata' | 'bilan' | 'config'>('planning');
   const [zoomLevel, setZoomLevel] = useState(100);
 
+  // Chargement initial
   useEffect(() => {
     const saved = localStorage.getItem('tds_config');
-    if (saved) setConfig(JSON.parse(saved));
+    if (saved) {
+        const parsed = JSON.parse(saved);
+        setConfig(parsed);
+        // On synchronise l'année locale avec la config chargée
+        if (parsed.ANNEE) setYear(parsed.ANNEE);
+    }
   }, []);
+
+  // --- GESTION DE LA CONFIGURATION ---
 
   const updateConfig = (newConfig: AppConfig) => {
       setConfig(newConfig);
       localStorage.setItem('tds_config', JSON.stringify(newConfig));
   };
 
+  // Gestion des changements de l'Année (Sync State + Config)
+  const handleYearChange = (val: string) => {
+      const newYear = parseInt(val) || new Date().getFullYear();
+      setYear(newYear);
+      updateConfig({ ...config, ANNEE: newYear });
+  };
+
+  // Gestion des changements du CONTRAT (Règles)
+  const handleContratChange = (field: keyof typeof config.CONTRAT, val: string) => {
+      const numVal = parseInt(val);
+      const newConfig = {
+          ...config,
+          CONTRAT: {
+              ...config.CONTRAT,
+              [field]: isNaN(numVal) ? 0 : numVal
+          }
+      };
+      updateConfig(newConfig);
+  };
+
+  // Gestion des Vacations (Ajout/Suppr/Modif)
   const handleAddVacation = () => {
       const code = window.prompt("Code de la vacation (ex: Nuit, J4...) ?");
       if (!code) return; 
-      
       const codeUpper = code.toUpperCase().trim();
-      if (config.VACATIONS[codeUpper]) {
-          alert("Ce code existe déjà !");
-          return;
-      }
-      const newVacations = { 
-          ...config.VACATIONS, 
-          [codeUpper]: { debut: 8.0, fin: 17.0 } 
-      };
+      if (config.VACATIONS[codeUpper]) { alert("Ce code existe déjà !"); return; }
+      const newVacations = { ...config.VACATIONS, [codeUpper]: { debut: 8.0, fin: 17.0 } };
       updateConfig({ ...config, VACATIONS: newVacations });
   };
 
@@ -116,13 +143,12 @@ function App() {
   const handleChangeVacation = (code: string, field: 'debut' | 'fin', value: number) => {
       const newVacations = {
           ...config.VACATIONS,
-          [code]: {
-              ...config.VACATIONS[code],
-              [field]: value
-          }
+          [code]: { ...config.VACATIONS[code], [field]: value }
       };
       updateConfig({ ...config, VACATIONS: newVacations });
   };
+
+  // --- HANDLERS API & IMPORT ---
 
   const handleImport = async () => {
     setStatus({type:'loading', msg:'📡 Lecture...'});
@@ -266,13 +292,13 @@ function App() {
                 </div>
             </div>
 
-            {/* DROITE : SIDEBAR */}
+            {/* DROITE : SIDEBAR (CONFIG) */}
             <div style={{
                 width: 340, background: 'white', borderLeft: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column',
                 overflowY: 'auto', flexShrink: 0
             }}>
                 
-                {/* SOURCE */}
+                {/* 1. SOURCE */}
                 <div style={sidebarSectionStyle}>
                     <h3 style={sidebarTitleStyle}>📗 SOURCE CSV (LECTURE)</h3>
                     <div style={{marginBottom:10}}>
@@ -282,19 +308,75 @@ function App() {
                     <button onClick={handleImport} style={secondaryButtonStyle}>📥 Importer Désidérata</button>
                 </div>
 
-                {/* PARAMETRES */}
+                {/* 2. PARAMETRES GÉNÉRAUX (Modifiables) */}
                 <div style={sidebarSectionStyle}>
                     <h3 style={{...sidebarTitleStyle, color:'#3b82f6'}}>⚙️ PARAMÈTRES GÉNÉRAUX</h3>
-                    <div style={rowStyle}><label style={labelStyle}>Année</label><input type="number" value={year} onChange={e=>setYear(Number(e.target.value))} style={numberInputStyle}/></div>
-                    <div style={rowStyle}><label style={labelStyle}>Jour Début</label><input type="number" value={startDay} onChange={e=>setStartDay(Number(e.target.value))} style={numberInputStyle}/></div>
-                    <div style={rowStyle}><label style={labelStyle}>Jour Fin</label><input type="number" value={endDay} onChange={e=>setEndDay(Number(e.target.value))} style={numberInputStyle}/></div>
+                    
+                    {/* Dates */}
+                    <div style={rowStyle}>
+                        <label style={labelStyle}>Année</label>
+                        <input type="number" value={year} onChange={e=>handleYearChange(e.target.value)} style={numberInputStyle}/>
+                    </div>
+                    <div style={rowStyle}>
+                        <label style={labelStyle}>Jour Début</label>
+                        <input type="number" value={startDay} onChange={e=>setStartDay(Number(e.target.value))} style={numberInputStyle}/>
+                    </div>
+                    <div style={rowStyle}>
+                        <label style={labelStyle}>Jour Fin</label>
+                        <input type="number" value={endDay} onChange={e=>setEndDay(Number(e.target.value))} style={numberInputStyle}/>
+                    </div>
+                    
                     <div style={{height:1, background:'#f1f5f9', margin:'10px 0'}}></div>
-                    <div style={rowStyle}><label style={labelStyle}>Temps Limite (sec)</label><input type="number" value={config.CONTRAT.SOLVER_TIME_LIMIT || 25} style={{...numberInputStyle, color:'#3b82f6', fontWeight:'bold'}} disabled/></div>
-                    <div style={rowStyle}><label style={labelStyle}>Max Heures (7j glissants)</label><input type="number" value={config.CONTRAT.MAX_HOURS_7_ROLLING} style={numberInputStyle} disabled/></div>
-                    <div style={rowStyle}><label style={labelStyle}>Max Heures (Sem. Civile)</label><input type="number" value={config.CONTRAT.MAX_HOURS_WEEK_CALENDAR} style={numberInputStyle} disabled/></div>
+
+                    {/* Contraintes Contrat (Liées à config.CONTRAT) */}
+                    <div style={rowStyle}>
+                        <label style={labelStyle}>Temps Limite (sec)</label>
+                        <input 
+                            type="number" 
+                            value={config.CONTRAT.SOLVER_TIME_LIMIT || 25} 
+                            onChange={e=>handleContratChange('SOLVER_TIME_LIMIT', e.target.value)}
+                            style={{...numberInputStyle, color:'#3b82f6', fontWeight:'bold'}} 
+                        />
+                    </div>
+                    <div style={rowStyle}>
+                        <label style={labelStyle}>Max Heures (7j glissants)</label>
+                        <input 
+                            type="number" 
+                            value={config.CONTRAT.MAX_HOURS_7_ROLLING} 
+                            onChange={e=>handleContratChange('MAX_HOURS_7_ROLLING', e.target.value)}
+                            style={numberInputStyle} 
+                        />
+                    </div>
+                    <div style={rowStyle}>
+                        <label style={labelStyle}>Max Heures (Sem. Civile)</label>
+                        <input 
+                            type="number" 
+                            value={config.CONTRAT.MAX_HOURS_WEEK_CALENDAR} 
+                            onChange={e=>handleContratChange('MAX_HOURS_WEEK_CALENDAR', e.target.value)}
+                            style={numberInputStyle} 
+                        />
+                    </div>
+                    <div style={rowStyle}>
+                        <label style={labelStyle}>Repos Min (h)</label>
+                        <input 
+                            type="number" 
+                            value={config.CONTRAT.MIN_REST_HOURS} 
+                            onChange={e=>handleContratChange('MIN_REST_HOURS', e.target.value)}
+                            style={numberInputStyle} 
+                        />
+                    </div>
+                    <div style={rowStyle}>
+                        <label style={labelStyle}>Max Jours Consécutifs</label>
+                        <input 
+                            type="number" 
+                            value={config.CONTRAT.MAX_CONSECUTIVE_SHIFTS} 
+                            onChange={e=>handleContratChange('MAX_CONSECUTIVE_SHIFTS', e.target.value)}
+                            style={numberInputStyle} 
+                        />
+                    </div>
                 </div>
 
-                {/* VACATIONS (HH:MM) */}
+                {/* 3. VACATIONS */}
                 <div style={sidebarSectionStyle}>
                     <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10}}>
                         <h3 style={{...sidebarTitleStyle, color:'#10b981', marginBottom:0}}>🕒 VACATIONS (HH:MM)</h3>
