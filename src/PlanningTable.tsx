@@ -106,11 +106,27 @@ const AgentCellRenderer = (props: any) => {
     );
 };
 
-// --- 3. COMPOSANT CELLULE SHIFT ---
+// --- 3. COMPOSANT CELLULE SHIFT (MODIFIÉ POUR OVERLAY BLEU) ---
 const ShiftCellRenderer = (props: any) => {
     const val = props.value;
-    if (!val || val === '' || val === 'OFF') return null;
+    
+    // Récupération des infos de contexte pour le match désidérata
+    const { preAssignments, showDesiderataMatch } = props.context;
+    const agentName = props.data.Agent;
+    const dayNum = props.colDef.headerComponentParams.dayNum; // On récupère le jour via les params du header
 
+    // Recherche si cet agent avait demandé quelque chose ce jour-là
+    const requestedShift = preAssignments && preAssignments[agentName] 
+        ? preAssignments[agentName][dayNum] 
+        : null;
+
+    // Condition pour afficher le cadre bleu
+    // 1. Le mode "Voir Demandes" est activé
+    // 2. Il y avait une demande explicite (pas juste vide)
+    const isDesiderataMatch = showDesiderataMatch && requestedShift && requestedShift !== '';
+
+    // Définition du style du badge
+    if (!val || val === '' || val === 'OFF') return null;
     let style = { color: '#334155', bg: '#f1f5f9', border: '#cbd5e1' }; 
 
     switch (val) {
@@ -129,11 +145,23 @@ const ShiftCellRenderer = (props: any) => {
     }
 
     return (
-        <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', width: '100%'}}>
+        <div 
+            title={isDesiderataMatch ? `Désidérata d'origine : ${requestedShift}` : undefined}
+            style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', width: '100%'}}
+        >
             <span style={{
-                backgroundColor: style.bg, color: style.color, border: `1px solid ${style.border}`,
-                borderRadius: '6px', padding: '2px 0', fontSize: '11px', fontWeight: '700',
-                width: '32px', textAlign: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.03)', display: 'inline-block'
+                backgroundColor: style.bg, 
+                color: style.color, 
+                // Si match désidérata : Bordure BLEUE foncée épaisse, sinon bordure normale
+                border: isDesiderataMatch ? '2px solid #2563eb' : `1px solid ${style.border}`,
+                borderRadius: '6px', 
+                padding: isDesiderataMatch ? '1px 0' : '2px 0', // Ajustement padding pour pas changer la taille totale
+                fontSize: '11px', 
+                fontWeight: '700',
+                width: '32px', 
+                textAlign: 'center', 
+                boxShadow: isDesiderataMatch ? '0 0 4px rgba(37,99,235,0.3)' : '0 1px 2px rgba(0,0,0,0.03)', 
+                display: 'inline-block'
             }}>
                 {val}
             </span>
@@ -147,12 +175,18 @@ interface PlanningTableProps {
   year: number;
   startDay: number;
   endDay: number;
-  config: any; 
+  config: any;
   isDesiderataView?: boolean;
+  // Nouvelles props
+  preAssignments?: any;
+  showDesiderataMatch?: boolean;
 }
 
 const PlanningTable: React.FC<PlanningTableProps> = ({ 
-  data, year, startDay, endDay, config, isDesiderataView = false 
+  data, year, startDay, endDay, config, 
+  isDesiderataView = false,
+  preAssignments = {}, 
+  showDesiderataMatch = false 
 }) => {
 
   const components = useMemo(() => ({
@@ -196,7 +230,6 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
         field: dayStr,
         width: 52, 
         
-        // Ajout de la classe CSS pour l'en-tête weekend
         headerClass: isWeekend ? 'weekend-header' : '',
 
         headerComponentParams: {
@@ -207,11 +240,10 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
         },
         cellRenderer: 'shiftCellRenderer',
         
-        // Couleur de fond modifiée ici pour les weekends
         cellStyle: { 
             display: 'flex', justifyContent: 'center', alignItems: 'center', 
             borderRight: '1px solid #f1f5f9', padding: 0,
-            backgroundColor: isWeekend ? '#f3f4f6' : 'white' // #f3f4f6 est un gris très léger
+            backgroundColor: isWeekend ? '#f3f4f6' : 'white'
         },
         editable: false 
       });
@@ -231,18 +263,15 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
         .ag-theme-balham .ag-row { border-bottom-color: #f1f5f9; }
         .ag-theme-balham .ag-pinned-left-header { border-right: 1px solid #e2e8f0; }
         .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; }
-
-        /* Style pour l'en-tête weekend */
-        .ag-theme-balham .weekend-header {
-            background-color: #f3f4f6 !important;
-        }
+        .ag-theme-balham .weekend-header { background-color: #f3f4f6 !important; }
       `}</style>
 
       <AgGridReact 
         rowData={data || []} 
         columnDefs={columnDefs} 
         components={components} 
-        context={{ daysList, config }}
+        // ⚠️ PASSAGE DES NOUVELLES PROPS DANS LE CONTEXTE
+        context={{ daysList, config, preAssignments, showDesiderataMatch }}
         defaultColDef={{ 
             resizable: true, 
             sortable: false, 
