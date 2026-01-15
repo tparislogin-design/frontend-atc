@@ -189,14 +189,13 @@ function App() {
 
                    {/* VUE BILAN (C'est ici que le composant est utilisé !) */}
                    {activeTab === 'bilan' && (
-                       <Bilan planning={planning} config={config} />
-                   )}
-                   
-                   {/* VUE CONFIG (Contenu simple, car la sidebar fait le reste) */}
-                   {activeTab === 'config' && (
-                       <div style={{padding:40, textAlign:'center', color:'#94a3b8'}}>
-                           Utilisez le panneau latéral droit pour modifier la configuration.
-                       </div>
+                       <Bilan 
+                            planning={planning} 
+                            config={config} 
+                            year={year}           // <--- Ajouté
+                            startDay={startDay}   // <--- Ajouté
+                            endDay={endDay}       // <--- Ajouté
+                        />
                    )}
 
                 </div>
