@@ -1,30 +1,18 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+
+// Composants
 import PlanningTable from './PlanningTable';
 import Bilan from './Bilan';
+
+// Utils & Types (Nouveaux imports)
 import { parseGoogleSheet } from './utils/sheetParser';
 import { convertPreAssignmentsToRows } from './utils/dataConverters';
+import { decimalToTime, timeToDecimal } from './utils/timeConverters'; // <--- ICI
+import { AppConfig } from './utils/types'; // <--- ICI
 
 // ⚠️ TON URL HUGGING FACE
 const API_URL = "https://ttttty-ty.hf.space/api/optimize"; 
-
-// --- 1. DÉFINITION DU TYPE (POUR CORRIGER L'ERREUR TYPESCRIPT) ---
-interface AppConfig {
-  ANNEE: number;
-  CONTROLEURS: string[];
-  CONTROLLERS_AFFECTES_BUREAU: string[];
-  VACATIONS: {
-    [key: string]: { debut: number; fin: number }; // Ceci autorise n'importe quel code (string)
-  };
-  CONTRAT: {
-    MIN_REST_HOURS: number;
-    MAX_CONSECUTIVE_SHIFTS: number;
-    MAX_HOURS_WEEK_CALENDAR: number;
-    MAX_HOURS_7_ROLLING: number;
-    MAX_BACKTRACKS: number;
-    SOLVER_TIME_LIMIT?: number;
-  };
-}
 
 const DEFAULT_CONFIG: AppConfig = {
   ANNEE: 2026,
@@ -46,8 +34,6 @@ const DEFAULT_CONFIG: AppConfig = {
 };
 
 function App() {
-  // --- ETAT CONFIG & DATA ---
-  // On applique le type AppConfig ici pour que TypeScript comprenne la structure
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   
   const [year, setYear] = useState(2026);
@@ -68,8 +54,6 @@ function App() {
     if (saved) setConfig(JSON.parse(saved));
   }, []);
 
-  // --- FONCTIONS DE GESTION CONFIG ---
-
   const updateConfig = (newConfig: AppConfig) => {
       setConfig(newConfig);
       localStorage.setItem('tds_config', JSON.stringify(newConfig));
@@ -80,7 +64,6 @@ function App() {
       if (!code) return; 
       
       const codeUpper = code.toUpperCase().trim();
-      // TypeScript ne râlera plus ici grâce à l'interface
       if (config.VACATIONS[codeUpper]) {
           alert("Ce code existe déjà !");
           return;
@@ -99,19 +82,16 @@ function App() {
       updateConfig({ ...config, VACATIONS: newVacations });
   };
 
-  const handleChangeVacation = (code: string, field: 'debut' | 'fin', value: string) => {
-      const numValue = parseFloat(value);
+  const handleChangeVacation = (code: string, field: 'debut' | 'fin', value: number) => {
       const newVacations = {
           ...config.VACATIONS,
           [code]: {
               ...config.VACATIONS[code],
-              [field]: isNaN(numValue) ? 0 : numValue
+              [field]: value
           }
       };
       updateConfig({ ...config, VACATIONS: newVacations });
   };
-
-  // --- HANDLERS ---
 
   const handleImport = async () => {
     setStatus({type:'loading', msg:'📡 Lecture...'});
@@ -156,7 +136,6 @@ function App() {
     ? convertPreAssignmentsToRows(preAssignments)
     : planning;
 
-  // --- RENDER ---
   return (
     <div style={{display: 'flex', flexDirection: 'column', height: '100vh', background: '#f8fafc', fontFamily: '"Inter", sans-serif'}}>
         
@@ -284,7 +263,7 @@ function App() {
                     <div style={rowStyle}><label style={labelStyle}>Max Heures (Sem. Civile)</label><input type="number" value={config.CONTRAT.MAX_HOURS_WEEK_CALENDAR} style={numberInputStyle} disabled/></div>
                 </div>
 
-                {/* VACATIONS (INTERACTIVE) */}
+                {/* VACATIONS (HH:MM) */}
                 <div style={sidebarSectionStyle}>
                     <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10}}>
                         <h3 style={{...sidebarTitleStyle, color:'#10b981', marginBottom:0}}>🕒 VACATIONS (HH:MM)</h3>
@@ -299,13 +278,31 @@ function App() {
                     {Object.entries(config.VACATIONS).map(([code, horaire]: any) => (
                         <div key={code} style={{display:'flex', alignItems:'center', gap:5, marginBottom:8, background:'#f8fafc', padding:6, borderRadius:6, border:'1px solid #f1f5f9'}}>
                             <span style={{fontWeight:'bold', fontSize:12, minWidth:35, textAlign:'center', background:'white', border:'1px solid #e2e8f0', borderRadius:4, padding:'4px 0', color:'#334155'}}>{code}</span>
-                            <input type="number" step="0.25" value={horaire.debut} onChange={(e) => handleChangeVacation(code, 'debut', e.target.value)} style={{width:45, fontSize:11, textAlign:'center', border:'1px solid #cbd5e1', borderRadius:3, padding:'2px'}} />
+                            
+                            {/* Input Début (Texte converti) */}
+                            <input 
+                                key={`d-${horaire.debut}`} 
+                                type="text" 
+                                defaultValue={decimalToTime(horaire.debut)} 
+                                onBlur={(e) => handleChangeVacation(code, 'debut', timeToDecimal(e.target.value))} 
+                                style={{width:45, fontSize:11, textAlign:'center', border:'1px solid #cbd5e1', borderRadius:3, padding:'2px'}} 
+                            />
+                            
                             <span style={{color:'#94a3b8', fontSize:10}}>➜</span>
-                            <input type="number" step="0.25" value={horaire.fin} onChange={(e) => handleChangeVacation(code, 'fin', e.target.value)} style={{width:45, fontSize:11, textAlign:'center', border:'1px solid #cbd5e1', borderRadius:3, padding:'2px'}} />
+                            
+                            {/* Input Fin (Texte converti) */}
+                            <input 
+                                key={`f-${horaire.fin}`} 
+                                type="text" 
+                                defaultValue={decimalToTime(horaire.fin)} 
+                                onBlur={(e) => handleChangeVacation(code, 'fin', timeToDecimal(e.target.value))} 
+                                style={{width:45, fontSize:11, textAlign:'center', border:'1px solid #cbd5e1', borderRadius:3, padding:'2px'}} 
+                            />
+                            
                             <span onClick={() => handleDeleteVacation(code)} style={{cursor:'pointer', marginLeft:'auto', fontSize:16, color:'#ef4444', fontWeight:'bold', padding:'0 4px'}} title="Supprimer">×</span>
                         </div>
                     ))}
-                    <div style={{marginTop:10, fontSize:10, color:'#94a3b8', fontStyle:'italic'}}>* 5.75 = 5h45, 12.5 = 12h30</div>
+                    <div style={{marginTop:10, fontSize:10, color:'#94a3b8', fontStyle:'italic'}}>* 5h45 ou 5:45</div>
                 </div>
 
             </div>
