@@ -18,7 +18,7 @@ const API_URL = "https://ttttty-ty.hf.space/api/optimize";
 const DEFAULT_CONFIG: AppConfig = {
   ANNEE: 2026,
   CONTROLEURS: ["GAO", "WBR", "PLC", "CML", "BBD", "LAK", "MZN", "TRT", "CLO", "LNN", "KGR", "FRD", "DAZ", "GNC", "DTY", "JCT"],
-  CONTROLLERS_AFFECTES_BUREAU: [],
+  CONTROLLERS_AFFECTES_BUREAU: ["GNC"],
   VACATIONS: { 
     "M": {debut: 5.75, fin: 12.75}, 
     "J1": {debut: 7.5, fin: 15.5}, 
