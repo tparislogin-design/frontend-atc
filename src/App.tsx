@@ -70,7 +70,7 @@ function App() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   
   const [year, setYear] = useState(2026);
-  const [startDay, setStartDay] = useState(365); 
+  const [startDay, setStartDay] = useState(1); 
   const [endDay, setEndDay] = useState(28);
   const [sheetUrl, setSheetUrl] = useState("https://docs.google.com/spreadsheets/d/1lLtFisk983kJ-Yu0rtPyJAoweHxnsKwzen_J1rxsJes/edit");
   
