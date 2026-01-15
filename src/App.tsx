@@ -176,17 +176,18 @@ function App() {
                 {/* CONTENU VARIABLE SELON L'ONGLET */}
                 <div style={{flex: 1, width: '100%', height: '100%', background: '#fff'}}>
                     
-                   {/* VUE GRILLE (PLANNING OU DESIDERATA) */}
+{/* VUE GRILLE (PLANNING OU DESIDERATA) */}
                    {(activeTab === 'planning' || activeTab === 'desiderata') && (
                        <PlanningTable 
                             data={gridData} 
                             year={year} 
                             startDay={startDay} 
-                            endDay={endDay} 
+                            endDay={endDay}
+                            config={config}  // <--- AJOUTEZ CETTE LIGNE
                             isDesiderataView={activeTab === 'desiderata'}
                         />
                    )}
-
+                   
                    {/* VUE BILAN (C'est ici que le composant est utilisé !) */}
                    {activeTab === 'bilan' && (
                        <Bilan 
