@@ -10,36 +10,60 @@ import "ag-grid-community/styles/ag-theme-balham.css";
 ModuleRegistry.registerModules([ AllCommunityModule ]);
 
 // --- 1. COMPOSANT EN-TÊTE PERSONNALISÉ ---
+// --- 1. HEADER PERSONNALISÉ (DYNAMIQUE) ---
 const CustomHeader = (props: any) => {
-    const { displayName, dayNum, fullDate } = props;
+    const { displayName, dayNum, fullDate, api } = props;
     
-    // MOCK : Liste des vacations requises (Pour l'aspect visuel V2.1)
-    const requiredShifts = ['J3', 'M', 'J1']; 
+    // 1. DÉFINITION DE LA CIBLE (TARGET)
+    // Idéalement, cela viendra de ta config plus tard.
+    // Pour l'instant, on fixe la cible que tu m'as montrée.
+    const targetShifts = ['M', 'J1', 'J3']; 
+
+    // 2. ANALYSE DE LA COLONNE (QUI EST LÀ ?)
+    const presentShifts = new Set<string>();
+    
+    if (api) {
+        // On parcourt toutes les lignes affichées dans la grille
+        api.forEachNode((node: any) => {
+            // On récupère la valeur de la cellule pour ce jour précis (dayNum)
+            const val = node.data ? node.data[dayNum] : null;
+            if (val && val !== 'OFF' && val !== 'C' && val !== '') {
+                presentShifts.add(val);
+            }
+        });
+    }
+
+    // 3. CALCUL DES MANQUANTS (Target - Présents)
+    const missingShifts = targetShifts.filter(code => !presentShifts.has(code));
+
+    // Si tout est pourvu, on n'affiche rien (ou un petit check vert si tu préfères)
+    const isComplete = missingShifts.length === 0;
 
     return (
         <div style={{display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', paddingTop: 6, boxSizing:'border-box'}}>
-            {/* Jour Semaine */}
             <div style={{fontSize: 10, fontWeight: '700', color: '#64748b', textTransform:'uppercase', lineHeight:'1.2'}}>
                 {displayName.substring(0, 2)}
             </div>
-            
-            {/* Numéro Jour */}
             <div style={{fontSize: 13, fontWeight: '800', color: '#1e293b', lineHeight:'1.4'}}>
                 {dayNum}
             </div>
-
-            {/* Date */}
             <div style={{fontSize: 10, color: '#94a3b8', marginBottom: 6}}>
                 {fullDate}
             </div>
 
-            {/* Liste Verticale Rouge (Besoins) */}
+            {/* LISTE DYNAMIQUE DES MANQUANTS */}
             <div style={{display:'flex', flexDirection:'column', gap: 1, marginTop: 'auto', paddingBottom: 6}}>
-                {requiredShifts.map((code, idx) => (
-                    <span key={idx} style={{fontSize: 9, color: '#ef4444', fontWeight: '700', lineHeight: '11px', textAlign:'center'}}>
-                        {code}
-                    </span>
-                ))}
+                {isComplete ? (
+                    // Optionnel : Un petit indicateur que tout est OK ?
+                    // <span style={{fontSize:9, color:'#16a34a'}}>OK</span>
+                    null
+                ) : (
+                    missingShifts.map((code, idx) => (
+                        <span key={idx} style={{fontSize: 9, color: '#ef4444', fontWeight: '700', lineHeight: '11px', textAlign:'center'}}>
+                            {code}
+                        </span>
+                    ))
+                )}
             </div>
         </div>
     );
