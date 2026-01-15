@@ -106,27 +106,21 @@ const AgentCellRenderer = (props: any) => {
     );
 };
 
-// --- 3. COMPOSANT CELLULE SHIFT (MODIFIÉ POUR OVERLAY BLEU) ---
+// --- 3. COMPOSANT CELLULE SHIFT ---
 const ShiftCellRenderer = (props: any) => {
     const val = props.value;
-    
-    // Récupération des infos de contexte pour le match désidérata
     const { preAssignments, showDesiderataMatch } = props.context;
     const agentName = props.data.Agent;
-    const dayNum = props.colDef.headerComponentParams.dayNum; // On récupère le jour via les params du header
+    const dayNum = props.colDef.headerComponentParams.dayNum;
 
-    // Recherche si cet agent avait demandé quelque chose ce jour-là
     const requestedShift = preAssignments && preAssignments[agentName] 
         ? preAssignments[agentName][dayNum] 
         : null;
 
-    // Condition pour afficher le cadre bleu
-    // 1. Le mode "Voir Demandes" est activé
-    // 2. Il y avait une demande explicite (pas juste vide)
     const isDesiderataMatch = showDesiderataMatch && requestedShift && requestedShift !== '';
 
-    // Définition du style du badge
     if (!val || val === '' || val === 'OFF') return null;
+
     let style = { color: '#334155', bg: '#f1f5f9', border: '#cbd5e1' }; 
 
     switch (val) {
@@ -152,10 +146,9 @@ const ShiftCellRenderer = (props: any) => {
             <span style={{
                 backgroundColor: style.bg, 
                 color: style.color, 
-                // Si match désidérata : Bordure BLEUE foncée épaisse, sinon bordure normale
                 border: isDesiderataMatch ? '2px solid #2563eb' : `1px solid ${style.border}`,
                 borderRadius: '6px', 
-                padding: isDesiderataMatch ? '1px 0' : '2px 0', // Ajustement padding pour pas changer la taille totale
+                padding: isDesiderataMatch ? '1px 0' : '2px 0', 
                 fontSize: '11px', 
                 fontWeight: '700',
                 width: '32px', 
@@ -177,7 +170,6 @@ interface PlanningTableProps {
   endDay: number;
   config: any;
   isDesiderataView?: boolean;
-  // Nouvelles props
   preAssignments?: any;
   showDesiderataMatch?: boolean;
 }
@@ -207,15 +199,24 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
   }, [startDay, endDay]);
 
   const columnDefs = useMemo<ColDef[]>(() => {
+    // 1. Colonne Agent
     const cols: ColDef[] = [{
       field: 'Agent', 
       headerName: 'CONTRÔLEUR',
       pinned: 'left', 
       width: 140, 
       cellRenderer: 'agentCellRenderer',
-      cellStyle: { backgroundColor: '#f8fafc', borderRight: '1px solid #e2e8f0', display:'flex', alignItems:'center', padding:0 }
+      // Bordure droite plus prononcée pour séparer les noms du planning
+      cellStyle: { 
+          backgroundColor: '#f8fafc', 
+          borderRight: '2px solid #cbd5e1', // <-- Bordure plus visible ici
+          display:'flex', 
+          alignItems:'center', 
+          padding:0 
+      }
     }];
 
+    // 2. Colonnes Jours
     daysList.forEach(dayNum => {
       const dayStr = dayNum.toString();
       let currentYear = year;
@@ -240,10 +241,12 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
         },
         cellRenderer: 'shiftCellRenderer',
         
+        // Bordures de cellules plus visibles
         cellStyle: { 
             display: 'flex', justifyContent: 'center', alignItems: 'center', 
-            borderRight: '1px solid #f1f5f9', padding: 0,
-            backgroundColor: isWeekend ? '#f3f4f6' : 'white'
+            borderRight: '1px solid #cbd5e1', // <-- Bordure verticale grise visible
+            padding: 0,
+            backgroundColor: isWeekend ? '#e5e7eb' : 'white' // <-- Gris weekend un peu plus foncé
         },
         editable: false 
       });
@@ -256,21 +259,42 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
   return (
     <div className="ag-theme-balham" style={{ height: '100%', width: '100%' }}>
       <style>{`
+        /* Reset des paddings headers */
         .ag-theme-balham .ag-header-cell { padding: 0 !important; }
         .ag-theme-balham .ag-header-cell-label { width: 100%; height: 100%; padding: 0; }
-        .ag-theme-balham .ag-root-wrapper { border: none; }
-        .ag-theme-balham .ag-header { border-bottom: 1px solid #e2e8f0; background-color: white; }
-        .ag-theme-balham .ag-row { border-bottom-color: #f1f5f9; }
-        .ag-theme-balham .ag-pinned-left-header { border-right: 1px solid #e2e8f0; }
+        
+        /* BORDURES EXTÉRIEURES ET LIGNES PLUS PRONONCÉES */
+        .ag-theme-balham .ag-root-wrapper { border: 1px solid #94a3b8; } /* Bordure extérieure solide */
+        
+        .ag-theme-balham .ag-header { 
+            border-bottom: 2px solid #cbd5e1; /* Séparation Header/Body marquée */
+            background-color: white; 
+        }
+        
+        /* Lignes horizontales plus visibles */
+        .ag-theme-balham .ag-row { 
+            border-bottom-color: #cbd5e1; 
+        }
+        
+        /* Séparation Colonne fixée (Agent) */
+        .ag-theme-balham .ag-pinned-left-header { 
+            border-right: 2px solid #cbd5e1; 
+        }
+        
+        /* Couleur focus */
         .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; }
-        .ag-theme-balham .weekend-header { background-color: #f3f4f6 !important; }
+
+        /* Style weekend */
+        .ag-theme-balham .weekend-header { 
+            background-color: #e5e7eb !important; /* Gris plus visible */
+            border-bottom: 1px solid #cbd5e1;
+        }
       `}</style>
 
       <AgGridReact 
         rowData={data || []} 
         columnDefs={columnDefs} 
         components={components} 
-        // ⚠️ PASSAGE DES NOUVELLES PROPS DANS LE CONTEXTE
         context={{ daysList, config, preAssignments, showDesiderataMatch }}
         defaultColDef={{ 
             resizable: true, 
