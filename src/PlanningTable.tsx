@@ -8,10 +8,13 @@ import "ag-grid-community/styles/ag-theme-balham.css";
 
 ModuleRegistry.registerModules([ AllCommunityModule ]);
 
-// --- 1. HEADER PERSONNALISÉ ---
+// --- 1. HEADER PERSONNALISÉ (ZOOMABLE) ---
 const CustomHeader = (props: any) => {
-    const { displayName, dayNum, fullDate, api, config } = props;
+    const { displayName, dayNum, fullDate, api, config, zoomLevel } = props;
     
+    // Fonction locale pour scaler les polices
+    const s = (px: number) => Math.round(px * (zoomLevel / 100));
+
     const targetShifts = config && config.VACATIONS 
         ? Object.keys(config.VACATIONS) 
         : ['M', 'J1', 'J3']; 
@@ -37,19 +40,19 @@ const CustomHeader = (props: any) => {
     });
 
     return (
-        <div style={{display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', paddingTop: 6, boxSizing:'border-box'}}>
-            <div style={{fontSize: 10, fontWeight: '700', color: '#64748b', textTransform:'uppercase', lineHeight:'1.2'}}>
+        <div style={{display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', paddingTop: s(6), boxSizing:'border-box'}}>
+            <div style={{fontSize: s(10), fontWeight: '700', color: '#64748b', textTransform:'uppercase', lineHeight:'1.2'}}>
                 {displayName.substring(0, 2)}
             </div>
-            <div style={{fontSize: 13, fontWeight: '800', color: '#1e293b', lineHeight:'1.4'}}>
+            <div style={{fontSize: s(13), fontWeight: '800', color: '#1e293b', lineHeight:'1.4'}}>
                 {dayNum}
             </div>
-            <div style={{fontSize: 10, color: '#94a3b8', marginBottom: 6}}>
+            <div style={{fontSize: s(10), color: '#94a3b8', marginBottom: s(6)}}>
                 {fullDate}
             </div>
-            <div style={{display:'flex', flexDirection:'column', gap: 1, marginTop: 'auto', paddingBottom: 6}}>
+            <div style={{display:'flex', flexDirection:'column', gap: 1, marginTop: 'auto', paddingBottom: s(6)}}>
                 {missingShifts.map((code: string, idx: number) => (
-                    <span key={idx} style={{fontSize: 9, color: '#ef4444', fontWeight: '700', lineHeight: '11px', textAlign:'center'}}>
+                    <span key={idx} style={{fontSize: s(9), color: '#ef4444', fontWeight: '700', lineHeight: `${s(11)}px`, textAlign:'center'}}>
                         {code}
                     </span>
                 ))}
@@ -58,11 +61,13 @@ const CustomHeader = (props: any) => {
     );
 };
 
-// --- 2. COMPOSANT CELLULE AGENT ---
+// --- 2. COMPOSANT CELLULE AGENT (ZOOMABLE) ---
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
     const rowData = props.data;
-    const { daysList, config } = props.context; 
+    const { daysList, config, zoomLevel } = props.context; // On récupère zoomLevel du contexte
+
+    const s = (px: number) => Math.max(8, Math.round(px * (zoomLevel / 100))); // Min 8px pour lisibilité
 
     let worked = 0;
     let leaves = 0;
@@ -91,25 +96,29 @@ const AgentCellRenderer = (props: any) => {
     const isParite = ['WBR', 'PLC', 'KGR', 'FRD'].includes(agentName);
 
     return (
-        <div style={{display:'flex', flexDirection:'column', justifyContent:'center', height:'100%', paddingLeft: 8}}>
+        <div style={{display:'flex', flexDirection:'column', justifyContent:'center', height:'100%', paddingLeft: s(8)}}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <span style={{fontWeight:'700', fontSize: 13, color: '#334155'}}>{agentName}</span>
-                <div style={{display:'flex', gap:4, marginRight: 8}}>
-                    {isParite && <div style={{width:6, height:6, borderRadius:'50%', background:'#3b82f6'}} title="Parité"></div>}
-                    {isBureau && <div style={{width:6, height:6, borderRadius:'50%', background:'#ef4444'}} title="Bureau"></div>}
+                <span style={{fontWeight:'700', fontSize: s(13), color: '#334155'}}>{agentName}</span>
+                <div style={{display:'flex', gap:s(4), marginRight: s(8)}}>
+                    {isParite && <div style={{width:s(6), height:s(6), borderRadius:'50%', background:'#3b82f6'}} title="Parité"></div>}
+                    {isBureau && <div style={{width:s(6), height:s(6), borderRadius:'50%', background:'#ef4444'}} title="Bureau"></div>}
                 </div>
             </div>
-            <div style={{fontSize: 10, color: statsColor, fontWeight: 700, marginTop: 2}}>
+            <div style={{fontSize: s(10), color: statsColor, fontWeight: 700, marginTop: s(2)}}>
                 {worked} <span style={{color:'#cbd5e1', fontWeight:400}}>/</span> {target}
             </div>
         </div>
     );
 };
 
-// --- 3. COMPOSANT CELLULE SHIFT ---
+// --- 3. COMPOSANT CELLULE SHIFT (ZOOMABLE) ---
 const ShiftCellRenderer = (props: any) => {
     const val = props.value;
-    const { preAssignments, showDesiderataMatch } = props.context;
+    const { preAssignments, showDesiderataMatch, zoomLevel } = props.context;
+    
+    // Fonction de scale locale
+    const s = (px: number) => Math.round(px * (zoomLevel / 100));
+
     const agentName = props.data.Agent;
     const dayNum = props.colDef.headerComponentParams.dayNum;
 
@@ -146,12 +155,12 @@ const ShiftCellRenderer = (props: any) => {
             <span style={{
                 backgroundColor: style.bg, 
                 color: style.color, 
-                border: isDesiderataMatch ? '2px solid #2563eb' : `1px solid ${style.border}`,
-                borderRadius: '6px', 
+                border: isDesiderataMatch ? `2px solid #2563eb` : `1px solid ${style.border}`,
+                borderRadius: `${s(6)}px`, 
                 padding: isDesiderataMatch ? '1px 0' : '2px 0', 
-                fontSize: '11px', 
+                fontSize: `${Math.max(9, s(11))}px`, // Taille min 9px
                 fontWeight: '700',
-                width: '32px', 
+                width: `${s(32)}px`, // La largeur du badge s'adapte
                 textAlign: 'center', 
                 boxShadow: isDesiderataMatch ? '0 0 4px rgba(37,99,235,0.3)' : '0 1px 2px rgba(0,0,0,0.03)', 
                 display: 'inline-block'
@@ -172,13 +181,15 @@ interface PlanningTableProps {
   isDesiderataView?: boolean;
   preAssignments?: any;
   showDesiderataMatch?: boolean;
+  zoomLevel?: number; // Nouvelle prop
 }
 
 const PlanningTable: React.FC<PlanningTableProps> = ({ 
   data, year, startDay, endDay, config, 
   isDesiderataView = false,
   preAssignments = {}, 
-  showDesiderataMatch = false 
+  showDesiderataMatch = false,
+  zoomLevel = 100 // Valeur par défaut
 }) => {
 
   const components = useMemo(() => ({
@@ -198,18 +209,20 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
     return list;
   }, [startDay, endDay]);
 
+  // Fonction scale pour les dimensions de la grille
+  const s = (px: number) => Math.round(px * (zoomLevel / 100));
+
   const columnDefs = useMemo<ColDef[]>(() => {
     // 1. Colonne Agent
     const cols: ColDef[] = [{
       field: 'Agent', 
       headerName: 'CONTRÔLEUR',
       pinned: 'left', 
-      width: 140, 
+      width: s(140), // Largeur dynamique
       cellRenderer: 'agentCellRenderer',
-      // Bordure droite plus prononcée pour séparer les noms du planning
       cellStyle: { 
           backgroundColor: '#f8fafc', 
-          borderRight: '2px solid #cbd5e1', // <-- Bordure plus visible ici
+          borderRight: '2px solid #cbd5e1', 
           display:'flex', 
           alignItems:'center', 
           padding:0 
@@ -229,7 +242,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
 
       cols.push({
         field: dayStr,
-        width: 52, 
+        width: s(52), // Largeur dynamique
         
         headerClass: isWeekend ? 'weekend-header' : '',
 
@@ -237,16 +250,16 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
             displayName: dayName,
             dayNum: dayNum,
             fullDate: dateStr,
-            config: config 
+            config: config,
+            zoomLevel: zoomLevel // On passe le zoom au Header
         },
         cellRenderer: 'shiftCellRenderer',
         
-        // Bordures de cellules plus visibles
         cellStyle: { 
             display: 'flex', justifyContent: 'center', alignItems: 'center', 
-            borderRight: '1px solid #cbd5e1', // <-- Bordure verticale grise visible
+            borderRight: '1px solid #cbd5e1', 
             padding: 0,
-            backgroundColor: isWeekend ? '#e5e7eb' : 'white' // <-- Gris weekend un peu plus foncé
+            backgroundColor: isWeekend ? '#e5e7eb' : 'white'
         },
         editable: false 
       });
@@ -254,7 +267,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
     
     return cols; 
 
-  }, [year, startDay, endDay, isDesiderataView, daysList, config]);
+  }, [year, startDay, endDay, isDesiderataView, daysList, config, zoomLevel]); // Dépendance zoomLevel ajoutée
 
   return (
     <div className="ag-theme-balham" style={{ height: '100%', width: '100%' }}>
@@ -263,47 +276,33 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
         .ag-theme-balham .ag-header-cell { padding: 0 !important; }
         .ag-theme-balham .ag-header-cell-label { width: 100%; height: 100%; padding: 0; }
         
-        /* BORDURES EXTÉRIEURES ET LIGNES PLUS PRONONCÉES */
-        .ag-theme-balham .ag-root-wrapper { border: 1px solid #94a3b8; } /* Bordure extérieure solide */
+        .ag-theme-balham .ag-root-wrapper { border: 1px solid #94a3b8; }
         
         .ag-theme-balham .ag-header { 
-            border-bottom: 2px solid #cbd5e1; /* Séparation Header/Body marquée */
+            border-bottom: 2px solid #cbd5e1; 
             background-color: white; 
         }
         
-        /* Lignes horizontales plus visibles */
-        .ag-theme-balham .ag-row { 
-            border-bottom-color: #cbd5e1; 
-        }
-        
-        /* Séparation Colonne fixée (Agent) */
-        .ag-theme-balham .ag-pinned-left-header { 
-            border-right: 2px solid #cbd5e1; 
-        }
-        
-        /* Couleur focus */
+        .ag-theme-balham .ag-row { border-bottom-color: #cbd5e1; }
+        .ag-theme-balham .ag-pinned-left-header { border-right: 2px solid #cbd5e1; }
         .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; }
-
-        /* Style weekend */
-        .ag-theme-balham .weekend-header { 
-            background-color: #e5e7eb !important; /* Gris plus visible */
-            border-bottom: 1px solid #cbd5e1;
-        }
+        .ag-theme-balham .weekend-header { background-color: #e5e7eb !important; border-bottom: 1px solid #cbd5e1; }
       `}</style>
 
       <AgGridReact 
         rowData={data || []} 
         columnDefs={columnDefs} 
         components={components} 
-        context={{ daysList, config, preAssignments, showDesiderataMatch }}
+        // On passe le zoom dans le contexte pour les cellules
+        context={{ daysList, config, preAssignments, showDesiderataMatch, zoomLevel }}
         defaultColDef={{ 
             resizable: true, 
             sortable: false, 
             filter: false,
             suppressHeaderMenuButton: true 
         }}
-        headerHeight={140} 
-        rowHeight={50}     
+        headerHeight={s(140)} // Hauteur dynamique
+        rowHeight={s(50)}     // Hauteur dynamique
       />
     </div>
   );
