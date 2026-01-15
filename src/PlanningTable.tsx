@@ -12,8 +12,10 @@ ModuleRegistry.registerModules([ AllCommunityModule ]);
 const CustomHeader = (props: any) => {
     const { displayName, dayNum, fullDate, api, config, zoomLevel } = props;
     
-    // Fonction locale pour scaler les polices
-    const s = (px: number) => Math.round(px * (zoomLevel / 100));
+    // Fonction scale locale
+    // Si zoomLevel n'est pas passé (undefined), on prend 100 par défaut
+    const currentZoom = zoomLevel || 100;
+    const s = (px: number) => Math.round(px * (currentZoom / 100));
 
     const targetShifts = config && config.VACATIONS 
         ? Object.keys(config.VACATIONS) 
@@ -65,9 +67,11 @@ const CustomHeader = (props: any) => {
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
     const rowData = props.data;
-    const { daysList, config, zoomLevel } = props.context; // On récupère zoomLevel du contexte
+    const { daysList, config, zoomLevel } = props.context; 
 
-    const s = (px: number) => Math.max(8, Math.round(px * (zoomLevel / 100))); // Min 8px pour lisibilité
+    // Scale
+    const currentZoom = zoomLevel || 100;
+    const s = (px: number) => Math.max(8, Math.round(px * (currentZoom / 100)));
 
     let worked = 0;
     let leaves = 0;
@@ -116,8 +120,9 @@ const ShiftCellRenderer = (props: any) => {
     const val = props.value;
     const { preAssignments, showDesiderataMatch, zoomLevel } = props.context;
     
-    // Fonction de scale locale
-    const s = (px: number) => Math.round(px * (zoomLevel / 100));
+    // Scale
+    const currentZoom = zoomLevel || 100;
+    const s = (px: number) => Math.round(px * (currentZoom / 100));
 
     const agentName = props.data.Agent;
     const dayNum = props.colDef.headerComponentParams.dayNum;
@@ -158,9 +163,9 @@ const ShiftCellRenderer = (props: any) => {
                 border: isDesiderataMatch ? `2px solid #2563eb` : `1px solid ${style.border}`,
                 borderRadius: `${s(6)}px`, 
                 padding: isDesiderataMatch ? '1px 0' : '2px 0', 
-                fontSize: `${Math.max(9, s(11))}px`, // Taille min 9px
+                fontSize: `${Math.max(9, s(11))}px`,
                 fontWeight: '700',
-                width: `${s(32)}px`, // La largeur du badge s'adapte
+                width: `${s(32)}px`, // Largeur du badge dynamique
                 textAlign: 'center', 
                 boxShadow: isDesiderataMatch ? '0 0 4px rgba(37,99,235,0.3)' : '0 1px 2px rgba(0,0,0,0.03)', 
                 display: 'inline-block'
@@ -181,7 +186,7 @@ interface PlanningTableProps {
   isDesiderataView?: boolean;
   preAssignments?: any;
   showDesiderataMatch?: boolean;
-  zoomLevel?: number; // Nouvelle prop
+  zoomLevel?: number;
 }
 
 const PlanningTable: React.FC<PlanningTableProps> = ({ 
@@ -189,7 +194,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
   isDesiderataView = false,
   preAssignments = {}, 
   showDesiderataMatch = false,
-  zoomLevel = 100 // Valeur par défaut
+  zoomLevel = 100 
 }) => {
 
   const components = useMemo(() => ({
@@ -209,11 +214,10 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
     return list;
   }, [startDay, endDay]);
 
-  // Fonction scale pour les dimensions de la grille
+  // Fonction scale pour les dimensions
   const s = (px: number) => Math.round(px * (zoomLevel / 100));
 
   const columnDefs = useMemo<ColDef[]>(() => {
-    // 1. Colonne Agent
     const cols: ColDef[] = [{
       field: 'Agent', 
       headerName: 'CONTRÔLEUR',
@@ -229,7 +233,6 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
       }
     }];
 
-    // 2. Colonnes Jours
     daysList.forEach(dayNum => {
       const dayStr = dayNum.toString();
       let currentYear = year;
@@ -243,18 +246,15 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
       cols.push({
         field: dayStr,
         width: s(52), // Largeur dynamique
-        
         headerClass: isWeekend ? 'weekend-header' : '',
-
         headerComponentParams: {
             displayName: dayName,
             dayNum: dayNum,
             fullDate: dateStr,
             config: config,
-            zoomLevel: zoomLevel // On passe le zoom au Header
+            zoomLevel: zoomLevel // Passage du zoom au Header
         },
         cellRenderer: 'shiftCellRenderer',
-        
         cellStyle: { 
             display: 'flex', justifyContent: 'center', alignItems: 'center', 
             borderRight: '1px solid #cbd5e1', 
@@ -264,25 +264,16 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
         editable: false 
       });
     });
-    
     return cols; 
-
-  }, [year, startDay, endDay, isDesiderataView, daysList, config, zoomLevel]); // Dépendance zoomLevel ajoutée
+  }, [year, startDay, endDay, isDesiderataView, daysList, config, zoomLevel]);
 
   return (
     <div className="ag-theme-balham" style={{ height: '100%', width: '100%' }}>
       <style>{`
-        /* Reset des paddings headers */
         .ag-theme-balham .ag-header-cell { padding: 0 !important; }
         .ag-theme-balham .ag-header-cell-label { width: 100%; height: 100%; padding: 0; }
-        
         .ag-theme-balham .ag-root-wrapper { border: 1px solid #94a3b8; }
-        
-        .ag-theme-balham .ag-header { 
-            border-bottom: 2px solid #cbd5e1; 
-            background-color: white; 
-        }
-        
+        .ag-theme-balham .ag-header { border-bottom: 2px solid #cbd5e1; background-color: white; }
         .ag-theme-balham .ag-row { border-bottom-color: #cbd5e1; }
         .ag-theme-balham .ag-pinned-left-header { border-right: 2px solid #cbd5e1; }
         .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; }
@@ -290,10 +281,12 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
       `}</style>
 
       <AgGridReact 
+        // ⚠️ L'AJOUT DE KEY EST CRUCIAL ICI
+        key={zoomLevel} 
+        
         rowData={data || []} 
         columnDefs={columnDefs} 
         components={components} 
-        // On passe le zoom dans le contexte pour les cellules
         context={{ daysList, config, preAssignments, showDesiderataMatch, zoomLevel }}
         defaultColDef={{ 
             resizable: true, 
@@ -301,8 +294,10 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
             filter: false,
             suppressHeaderMenuButton: true 
         }}
-        headerHeight={s(140)} // Hauteur dynamique
-        rowHeight={s(50)}     // Hauteur dynamique
+        
+        // Hauteurs dynamiques
+        headerHeight={s(140)} 
+        rowHeight={s(50)}     
       />
     </div>
   );
