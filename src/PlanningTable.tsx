@@ -195,6 +195,10 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
       cols.push({
         field: dayStr,
         width: 52, 
+        
+        // Ajout de la classe CSS pour l'en-tête weekend
+        headerClass: isWeekend ? 'weekend-header' : '',
+
         headerComponentParams: {
             displayName: dayName,
             dayNum: dayNum,
@@ -202,10 +206,12 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
             config: config 
         },
         cellRenderer: 'shiftCellRenderer',
+        
+        // Couleur de fond modifiée ici pour les weekends
         cellStyle: { 
             display: 'flex', justifyContent: 'center', alignItems: 'center', 
             borderRight: '1px solid #f1f5f9', padding: 0,
-            backgroundColor: isWeekend ? '#fdfdfd' : 'white'
+            backgroundColor: isWeekend ? '#f3f4f6' : 'white' // #f3f4f6 est un gris très léger
         },
         editable: false 
       });
@@ -225,6 +231,11 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
         .ag-theme-balham .ag-row { border-bottom-color: #f1f5f9; }
         .ag-theme-balham .ag-pinned-left-header { border-right: 1px solid #e2e8f0; }
         .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; }
+
+        /* Style pour l'en-tête weekend */
+        .ag-theme-balham .weekend-header {
+            background-color: #f3f4f6 !important;
+        }
       `}</style>
 
       <AgGridReact 
@@ -236,7 +247,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
             resizable: true, 
             sortable: false, 
             filter: false,
-            suppressHeaderMenuButton: true // CORRIGÉ ICI
+            suppressHeaderMenuButton: true 
         }}
         headerHeight={140} 
         rowHeight={50}     
