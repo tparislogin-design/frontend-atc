@@ -5,13 +5,14 @@ import axios from 'axios';
 import PlanningTable from './PlanningTable';
 import Bilan from './Bilan';
 
-// Utils & Types (Nouveaux imports)
+// Utils
 import { parseGoogleSheet } from './utils/sheetParser';
 import { convertPreAssignmentsToRows } from './utils/dataConverters';
-import { decimalToTime, timeToDecimal } from './utils/timeConverters'; // <--- ICI
-import { AppConfig } from './utils/types'; // <--- ICI
+import { decimalToTime, timeToDecimal } from './utils/timeConverters';
 
-// ⚠️ TON URL HUGGING FACE
+// Import de TYPE (Correction ici)
+import type { AppConfig } from './utils/types';
+
 const API_URL = "https://ttttty-ty.hf.space/api/optimize"; 
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -31,6 +32,36 @@ const DEFAULT_CONFIG: AppConfig = {
     MAX_HOURS_7_ROLLING: 44,
     MAX_BACKTRACKS: 10
   }
+};
+
+// --- COMPOSANT INTERNE : TIME INPUT ---
+const TimeInput = ({ val, onSave }: { val: number, onSave: (v: number) => void }) => {
+    const [displayVal, setDisplayVal] = useState(decimalToTime(val));
+
+    useEffect(() => {
+        setDisplayVal(decimalToTime(val));
+    }, [val]);
+
+    const handleBlur = () => {
+        const decimal = timeToDecimal(displayVal);
+        setDisplayVal(decimalToTime(decimal)); 
+        onSave(decimal); 
+    };
+
+    return (
+        <input 
+            type="text" 
+            value={displayVal}
+            onChange={(e) => setDisplayVal(e.target.value)}
+            onBlur={handleBlur}
+            onKeyDown={(e) => { if(e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+            style={{
+                width: 50, fontSize: 12, textAlign: 'center', 
+                border: '1px solid #cbd5e1', borderRadius: 4, padding: '4px',
+                fontWeight: '600', color: '#1e293b', fontFamily:'monospace'
+            }} 
+        />
+    );
 };
 
 function App() {
@@ -279,30 +310,22 @@ function App() {
                         <div key={code} style={{display:'flex', alignItems:'center', gap:5, marginBottom:8, background:'#f8fafc', padding:6, borderRadius:6, border:'1px solid #f1f5f9'}}>
                             <span style={{fontWeight:'bold', fontSize:12, minWidth:35, textAlign:'center', background:'white', border:'1px solid #e2e8f0', borderRadius:4, padding:'4px 0', color:'#334155'}}>{code}</span>
                             
-                            {/* Input Début (Texte converti) */}
-                            <input 
-                                key={`d-${horaire.debut}`} 
-                                type="text" 
-                                defaultValue={decimalToTime(horaire.debut)} 
-                                onBlur={(e) => handleChangeVacation(code, 'debut', timeToDecimal(e.target.value))} 
-                                style={{width:45, fontSize:11, textAlign:'center', border:'1px solid #cbd5e1', borderRadius:3, padding:'2px'}} 
+                            <TimeInput 
+                                val={horaire.debut} 
+                                onSave={(v) => handleChangeVacation(code, 'debut', v)} 
                             />
                             
                             <span style={{color:'#94a3b8', fontSize:10}}>➜</span>
                             
-                            {/* Input Fin (Texte converti) */}
-                            <input 
-                                key={`f-${horaire.fin}`} 
-                                type="text" 
-                                defaultValue={decimalToTime(horaire.fin)} 
-                                onBlur={(e) => handleChangeVacation(code, 'fin', timeToDecimal(e.target.value))} 
-                                style={{width:45, fontSize:11, textAlign:'center', border:'1px solid #cbd5e1', borderRadius:3, padding:'2px'}} 
+                            <TimeInput 
+                                val={horaire.fin} 
+                                onSave={(v) => handleChangeVacation(code, 'fin', v)} 
                             />
                             
                             <span onClick={() => handleDeleteVacation(code)} style={{cursor:'pointer', marginLeft:'auto', fontSize:16, color:'#ef4444', fontWeight:'bold', padding:'0 4px'}} title="Supprimer">×</span>
                         </div>
                     ))}
-                    <div style={{marginTop:10, fontSize:10, color:'#94a3b8', fontStyle:'italic'}}>* 5h45 ou 5:45</div>
+                    <div style={{marginTop:10, fontSize:10, color:'#94a3b8', fontStyle:'italic'}}>* Format 5h45 ou 5:45</div>
                 </div>
 
             </div>
