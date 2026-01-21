@@ -79,7 +79,7 @@ function App() {
   const [preAssignments, setPreAssignments] = useState<any>({});
   const [planning, setPlanning] = useState<any[]>([]);
   
-  // NOUVEAU : État pour les contraintes souples (violettes)
+  // État pour les contraintes souples (violettes)
   const [softConstraints, setSoftConstraints] = useState<Set<string>>(new Set());
 
   const [loading, setLoading] = useState(false);
@@ -156,7 +156,7 @@ function App() {
       setSoftConstraints(newSet);
   };
 
-  // 2. Bascule GLOBALE (Nouveau Bouton)
+  // 2. Bascule GLOBALE (Bouton Tout Soft)
   const handleToggleAllSoft = () => {
       const allKeys = new Set<string>();
       let requestCount = 0;
@@ -266,36 +266,37 @@ function App() {
 
             <div style={{display:'flex', alignItems:'center', gap:15}}>
                 
+                {/* --- CONTRÔLES SPÉCIFIQUES PLANNING --- */}
                 {activeTab === 'planning' && (
-                    <div style={{display:'flex', gap: 5}}>
-                        <button
-                            onClick={() => setShowDesiderataMatch(!showDesiderataMatch)}
-                            style={{
-                                background: showDesiderataMatch ? '#e0f2fe' : 'transparent',
-                                color: showDesiderataMatch ? '#0284c7' : '#64748b',
-                                border: showDesiderataMatch ? '1px solid #7dd3fc' : '1px solid #e2e8f0',
-                                padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                                display:'flex', alignItems:'center', gap:5
-                            }}
-                        >
-                            {showDesiderataMatch ? '👁️ Masquer' : '👁️ Demandes'}
-                        </button>
+                    <button
+                        onClick={() => setShowDesiderataMatch(!showDesiderataMatch)}
+                        style={{
+                            background: showDesiderataMatch ? '#e0f2fe' : 'transparent',
+                            color: showDesiderataMatch ? '#0284c7' : '#64748b',
+                            border: showDesiderataMatch ? '1px solid #7dd3fc' : '1px solid #e2e8f0',
+                            padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                            display:'flex', alignItems:'center', gap:5
+                        }}
+                    >
+                        {showDesiderataMatch ? '👁️ Masquer' : '👁️ Demandes'}
+                    </button>
+                )}
 
-                        {/* --- BOUTON MAGIQUE TOUT SOFT --- */}
-                        <button
-                            onClick={handleToggleAllSoft}
-                            style={{
-                                background: softConstraints.size > 0 ? '#f3e8ff' : 'transparent',
-                                color: softConstraints.size > 0 ? '#9333ea' : '#64748b',
-                                border: softConstraints.size > 0 ? '1px solid #d8b4fe' : '1px solid #e2e8f0',
-                                padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                                display:'flex', alignItems:'center', gap:5
-                            }}
-                            title="Passer toutes les demandes en priorité basse (Violet)"
-                        >
-                            {softConstraints.size > 0 ? '🟣 Tout Reset' : '🟣 Tout Soft'}
-                        </button>
-                    </div>
+                {/* --- CONTRÔLES SPÉCIFIQUES DESIDERATA --- */}
+                {activeTab === 'desiderata' && (
+                    <button
+                        onClick={handleToggleAllSoft}
+                        style={{
+                            background: softConstraints.size > 0 ? '#f3e8ff' : 'transparent',
+                            color: softConstraints.size > 0 ? '#9333ea' : '#64748b',
+                            border: softConstraints.size > 0 ? '1px solid #d8b4fe' : '1px solid #e2e8f0',
+                            padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                            display:'flex', alignItems:'center', gap:5
+                        }}
+                        title="Passer toutes les demandes en priorité basse (Violet)"
+                    >
+                        {softConstraints.size > 0 ? '🟣 Tout Reset' : '🟣 Tout Soft'}
+                    </button>
                 )}
 
                 <div style={{display:'flex', alignItems:'center', gap:8, fontSize:12, color:'#64748b'}}>
