@@ -106,10 +106,11 @@ const AgentCellRenderer = (props: any) => {
     );
 };
 
-// --- 3. COMPOSANT CELLULE SHIFT ---
+// --- 3. COMPOSANT CELLULE SHIFT (MODIFIÉ POUR CERCLE VIOLET) ---
 const ShiftCellRenderer = (props: any) => {
     const val = props.value;
-    const { preAssignments, showDesiderataMatch } = props.context;
+    // On récupère les contextes pour le clic droit et l'état
+    const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft } = props.context;
     const agentName = props.data.Agent;
     const dayNum = props.colDef.headerComponentParams.dayNum;
 
@@ -118,6 +119,10 @@ const ShiftCellRenderer = (props: any) => {
         : null;
 
     const isDesiderataMatch = showDesiderataMatch && requestedShift && requestedShift !== '';
+    
+    // Vérification état Violet
+    const cellKey = `${agentName}_${dayNum}`;
+    const isSoft = softConstraints && softConstraints.has(cellKey);
 
     if (!val || val === '' || val === 'OFF') return null;
 
@@ -138,23 +143,42 @@ const ShiftCellRenderer = (props: any) => {
         default: break;
     }
 
+    // Gestion du Clic Droit
+    const handleContextMenu = (e: React.MouseEvent) => {
+        e.preventDefault(); 
+        if (onToggleSoft) {
+            onToggleSoft(agentName, dayNum);
+        }
+    };
+
+    // Style conditionnel
+    const getBorderStyle = () => {
+        if (isSoft) return '2px solid #9333ea'; // Violet prioritaire
+        if (isDesiderataMatch) return '2px solid #2563eb'; // Bleu si match standard
+        return `1px solid ${style.border}`;
+    };
+
     return (
         <div 
-            title={isDesiderataMatch ? `Désidérata d'origine : ${requestedShift}` : undefined}
-            style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', width: '100%'}}
+            onContextMenu={handleContextMenu}
+            title={isSoft ? "Priorité basse (Clic droit)" : (isDesiderataMatch ? `Désidérata d'origine : ${requestedShift}` : undefined)}
+            style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', width: '100%', cursor: 'context-menu'}}
         >
             <span style={{
                 backgroundColor: style.bg, 
                 color: style.color, 
-                border: isDesiderataMatch ? '2px solid #2563eb' : `1px solid ${style.border}`,
+                border: getBorderStyle(),
                 borderRadius: '6px', 
-                padding: isDesiderataMatch ? '1px 0' : '2px 0', 
+                padding: (isDesiderataMatch || isSoft) ? '1px 0' : '2px 0', 
                 fontSize: '11px', 
                 fontWeight: '700',
                 width: '32px', 
                 textAlign: 'center', 
-                boxShadow: isDesiderataMatch ? '0 0 4px rgba(37,99,235,0.3)' : '0 1px 2px rgba(0,0,0,0.03)', 
-                display: 'inline-block'
+                // Ombre portée violette si soft
+                boxShadow: isSoft ? '0 0 4px rgba(147, 51, 234, 0.5)' : (isDesiderataMatch ? '0 0 4px rgba(37,99,235,0.3)' : '0 1px 2px rgba(0,0,0,0.03)'), 
+                display: 'inline-block',
+                transform: isSoft ? 'scale(1.05)' : 'scale(1)',
+                transition: 'all 0.1s'
             }}>
                 {val}
             </span>
@@ -173,6 +197,9 @@ interface PlanningTableProps {
   preAssignments?: any;
   showDesiderataMatch?: boolean;
   zoomLevel?: number;
+  // Nouvelles props
+  softConstraints?: Set<string>;
+  onToggleSoft?: (agent: string, day: number) => void;
 }
 
 const PlanningTable: React.FC<PlanningTableProps> = ({ 
@@ -180,7 +207,9 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
   isDesiderataView = false,
   preAssignments = {}, 
   showDesiderataMatch = false,
-  zoomLevel = 100 
+  zoomLevel = 100,
+  softConstraints,
+  onToggleSoft
 }) => {
 
   const components = useMemo(() => ({
@@ -253,14 +282,11 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
   }, [year, startDay, endDay, isDesiderataView, daysList, config]);
 
   return (
-    // ⚠️ APPLICATION DU ZOOM CSS SUR LE CONTENEUR PRINCIPAL
     <div 
         className="ag-theme-balham" 
         style={{ 
             height: '100%', 
             width: '100%',
-            // C'est ici que la magie opère (supporte Chrome/Edge/Safari)
-            // Pour Firefox, on pourrait ajouter transform: scale(...)
             zoom: `${zoomLevel}%` 
         }}
     >
@@ -279,7 +305,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
         rowData={data || []} 
         columnDefs={columnDefs} 
         components={components} 
-        context={{ daysList, config, preAssignments, showDesiderataMatch }}
+        context={{ daysList, config, preAssignments, showDesiderataMatch, softConstraints, onToggleSoft }}
         defaultColDef={{ 
             resizable: true, 
             sortable: false, 
