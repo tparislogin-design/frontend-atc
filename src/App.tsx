@@ -37,6 +37,7 @@ const DEFAULT_CONFIG: AppConfig = {
   }
 };
 
+// --- COMPOSANT INTERNE : TIME INPUT ---
 const TimeInput = ({ val, onSave }: { val: number, onSave: (v: number) => void }) => {
     const [displayVal, setDisplayVal] = useState(decimalToTime(val));
 
@@ -68,6 +69,8 @@ const TimeInput = ({ val, onSave }: { val: number, onSave: (v: number) => void }
 
 function App() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
+  
+  // États locaux
   const [year, setYear] = useState(2026);
   const [startDay, setStartDay] = useState(1); 
   const [endDay, setEndDay] = useState(28);
@@ -84,6 +87,8 @@ function App() {
   const [activeTab, setActiveTab] = useState<'planning' | 'desiderata' | 'bilan' | 'config'>('planning');
   const [zoomLevel, setZoomLevel] = useState(100);
   const [showDesiderataMatch, setShowDesiderataMatch] = useState(false);
+
+  // Sidebar visibility
   const [showSidebar, setShowSidebar] = useState(true);
 
   useEffect(() => {
@@ -95,6 +100,7 @@ function App() {
     }
   }, []);
 
+  // --- GESTION CONFIG ---
   const updateConfig = (newConfig: AppConfig) => {
       setConfig(newConfig);
       localStorage.setItem('tds_config', JSON.stringify(newConfig));
@@ -139,7 +145,9 @@ function App() {
       updateConfig({ ...config, VACATIONS: newVacations });
   };
 
-  // Gestion du Clic Droit (Toggle Violet)
+  // --- GESTION DES CERCLES VIOLETS (SOFT) ---
+  
+  // 1. Bascule individuelle (Clic Droit)
   const handleToggleSoft = (agent: string, dayNum: number) => {
       const key = `${agent}_${dayNum}`;
       const newSet = new Set(softConstraints);
@@ -148,13 +156,42 @@ function App() {
       setSoftConstraints(newSet);
   };
 
+  // 2. Bascule GLOBALE (Nouveau Bouton)
+  const handleToggleAllSoft = () => {
+      const allKeys = new Set<string>();
+      let requestCount = 0;
+
+      // On scanne tous les désidérata connus
+      Object.entries(preAssignments).forEach(([agent, days]: [string, any]) => {
+          Object.keys(days).forEach(day => {
+              // Si la case n'est pas vide, c'est une demande
+              if (days[day] && days[day] !== "") {
+                  allKeys.add(`${agent}_${day}`);
+                  requestCount++;
+              }
+          });
+      });
+
+      if (requestCount === 0) {
+          alert("Aucun désidérata à cercler ! Importez d'abord les données.");
+          return;
+      }
+
+      // Si tout est déjà coché -> on décoche tout. Sinon on coche tout.
+      if (softConstraints.size === allKeys.size) {
+          setSoftConstraints(new Set()); // Reset
+      } else {
+          setSoftConstraints(allKeys); // Tout sélectionner
+      }
+  };
+
+  // --- HANDLERS API ---
   const handleImport = async () => {
     setStatus({type:'loading', msg:'📡 Lecture...'});
     try {
         const data = await parseGoogleSheet(sheetUrl, startDay, endDay); 
         setPreAssignments(data);
-        // Reset des soft constraints au nouvel import pour éviter incohérences
-        setSoftConstraints(new Set()); 
+        setSoftConstraints(new Set()); // Reset des contraintes violettes au nouvel import
         setStatus({type:'success', msg: `✅ Import OK (${Object.keys(data).length} agents)`});
         setActiveTab('desiderata');
     } catch (e: any) {
@@ -172,7 +209,7 @@ function App() {
         end_day: Number(endDay),
         config: { ...config, ANNEE: Number(year) },
         pre_assignments: preAssignments,
-        // Envoi de la liste "Violette"
+        // Envoi des contraintes violettes
         soft_assignments: Array.from(softConstraints) 
       };
       const response = await axios.post(API_URL, payload);
@@ -230,18 +267,35 @@ function App() {
             <div style={{display:'flex', alignItems:'center', gap:15}}>
                 
                 {activeTab === 'planning' && (
-                    <button
-                        onClick={() => setShowDesiderataMatch(!showDesiderataMatch)}
-                        style={{
-                            background: showDesiderataMatch ? '#e0f2fe' : 'transparent',
-                            color: showDesiderataMatch ? '#0284c7' : '#64748b',
-                            border: showDesiderataMatch ? '1px solid #7dd3fc' : '1px solid #e2e8f0',
-                            padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                            display:'flex', alignItems:'center', gap:5
-                        }}
-                    >
-                        {showDesiderataMatch ? '👁️ Masquer' : '👁️ Demandes'}
-                    </button>
+                    <div style={{display:'flex', gap: 5}}>
+                        <button
+                            onClick={() => setShowDesiderataMatch(!showDesiderataMatch)}
+                            style={{
+                                background: showDesiderataMatch ? '#e0f2fe' : 'transparent',
+                                color: showDesiderataMatch ? '#0284c7' : '#64748b',
+                                border: showDesiderataMatch ? '1px solid #7dd3fc' : '1px solid #e2e8f0',
+                                padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                                display:'flex', alignItems:'center', gap:5
+                            }}
+                        >
+                            {showDesiderataMatch ? '👁️ Masquer' : '👁️ Demandes'}
+                        </button>
+
+                        {/* --- BOUTON MAGIQUE TOUT SOFT --- */}
+                        <button
+                            onClick={handleToggleAllSoft}
+                            style={{
+                                background: softConstraints.size > 0 ? '#f3e8ff' : 'transparent',
+                                color: softConstraints.size > 0 ? '#9333ea' : '#64748b',
+                                border: softConstraints.size > 0 ? '1px solid #d8b4fe' : '1px solid #e2e8f0',
+                                padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                                display:'flex', alignItems:'center', gap:5
+                            }}
+                            title="Passer toutes les demandes en priorité basse (Violet)"
+                        >
+                            {softConstraints.size > 0 ? '🟣 Tout Reset' : '🟣 Tout Soft'}
+                        </button>
+                    </div>
                 )}
 
                 <div style={{display:'flex', alignItems:'center', gap:8, fontSize:12, color:'#64748b'}}>
@@ -261,6 +315,7 @@ function App() {
                     {loading ? '⚙️ Calcul...' : '⚡ Générer'}
                 </button>
 
+                {/* SIDEBAR TOGGLE */}
                 <button 
                     onClick={() => setShowSidebar(!showSidebar)}
                     style={{
@@ -280,6 +335,7 @@ function App() {
         {/* MAIN LAYOUT */}
         <div style={{flex: 1, display: 'flex', overflow: 'hidden'}}>
             
+            {/* CONTENT AREA */}
             <div style={{flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column'}}>
                 
                 {status.msg && (
@@ -303,10 +359,10 @@ function App() {
                             isDesiderataView={activeTab === 'desiderata'}
                             preAssignments={preAssignments}
                             showDesiderataMatch={activeTab === 'planning' ? showDesiderataMatch : false}
-                            // Props pour le "Violet"
+                            // Props pour le mode Violet
                             softConstraints={softConstraints}
                             onToggleSoft={handleToggleSoft}
-                            zoomLevel={zoomLevel} // Fix prop drilling
+                            zoomLevel={zoomLevel} 
                         />
                    )}
                    {activeTab === 'bilan' && <Bilan planning={planning} config={config} year={year} startDay={startDay} endDay={endDay} />}
@@ -314,19 +370,20 @@ function App() {
                 </div>
             </div>
 
-            {/* SIDEBAR */}
+            {/* SIDEBAR RIGHT */}
             {showSidebar && (
                 <div style={{
                     width: 340, background: 'white', borderLeft: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column',
                     overflowY: 'auto', flexShrink: 0
                 }}>
+                    
                     <div style={sidebarSectionStyle}>
                         <h3 style={sidebarTitleStyle}>📗 SOURCE CSV (LECTURE)</h3>
                         <div style={{marginBottom:10}}><label style={labelStyle}>URL Google Sheet (Public)</label><input type="text" value={sheetUrl} onChange={e=>setSheetUrl(e.target.value)} style={inputStyle}/></div>
                         <button onClick={handleImport} style={secondaryButtonStyle}>📥 Importer Désidérata</button>
                     </div>
-                    {/* ... Reste de la sidebar inchangée ... */}
-                     <div style={sidebarSectionStyle}>
+
+                    <div style={sidebarSectionStyle}>
                         <h3 style={{...sidebarTitleStyle, color:'#3b82f6'}}>⚙️ PARAMÈTRES GÉNÉRAUX</h3>
                         <div style={rowStyle}><label style={labelStyle}>Année</label><input type="number" value={year} onChange={e=>handleYearChange(e.target.value)} style={numberInputStyle}/></div>
                         <div style={rowStyle}><label style={labelStyle}>Jour Début</label><input type="number" value={startDay} onChange={e=>setStartDay(Number(e.target.value))} style={numberInputStyle}/></div>
@@ -357,12 +414,13 @@ function App() {
                     </div>
                 </div>
             )}
+
         </div>
     </div>
   );
 }
 
-// Styles inchangés
+// Styles inchangés...
 const sidebarSectionStyle: React.CSSProperties = { padding: 20, borderBottom: '1px solid #f1f5f9' };
 const sidebarTitleStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#64748b', letterSpacing: 0.5, marginBottom: 12, marginTop: 0, textTransform: 'uppercase' };
 const labelStyle: React.CSSProperties = { fontSize: 12, color: '#475569', fontWeight: 500 };
