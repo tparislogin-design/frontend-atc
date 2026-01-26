@@ -87,17 +87,10 @@ const AgentCellRenderer = (props: any) => {
     const isTargetMet = worked >= (target - 1);
     const statsColor = isTargetMet ? '#16a34a' : '#ea580c';
 
-    const isBureau = ['GNC'].includes(agentName);
-    const isParite = ['WBR', 'PLC', 'KGR', 'FRD'].includes(agentName);
-
     return (
         <div style={{display:'flex', flexDirection:'column', justifyContent:'center', height:'100%', paddingLeft: 8}}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                 <span style={{fontWeight:'700', fontSize: 13, color: '#334155'}}>{agentName}</span>
-                <div style={{display:'flex', gap:4, marginRight: 8}}>
-                    {isParite && <div style={{width:6, height:6, borderRadius:'50%', background:'#3b82f6'}} title="Parité"></div>}
-                    {isBureau && <div style={{width:6, height:6, borderRadius:'50%', background:'#ef4444'}} title="Bureau"></div>}
-                </div>
             </div>
             <div style={{fontSize: 10, color: statsColor, fontWeight: 700, marginTop: 2}}>
                 {worked} <span style={{color:'#cbd5e1', fontWeight:400}}>/</span> {target}
@@ -106,19 +99,19 @@ const AgentCellRenderer = (props: any) => {
     );
 };
 
-// --- 3. COMPOSANT CELLULE SHIFT (LOGIQUE SOFT & VIOLATION) ---
+// --- 3. COMPOSANT CELLULE SHIFT (LOGIQUE SOFT & MATCH) ---
 const ShiftCellRenderer = (props: any) => {
     const rawVal = props.value;
-    // On récupère isDesiderataView du contexte pour savoir dans quel onglet on est
-    const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView } = props.context;
+    const { preAssignments, softConstraints, onToggleSoft, isDesiderataView } = props.context;
     const agentName = props.data.Agent;
     const dayNum = props.colDef.headerComponentParams.dayNum;
 
     // --- NORMALISATION ---
     const normalize = (v: any) => {
         if (!v) return '';
-        if (v === 'O' || v === 'OFF' || v === '0') return 'OFF';
-        return v;
+        const s = v.toString().trim().toUpperCase();
+        if (s === 'O' || s === 'OFF' || s === '0') return 'OFF';
+        return s;
     };
 
     const displayVal = normalize(rawVal);
@@ -126,59 +119,63 @@ const ShiftCellRenderer = (props: any) => {
     // Si vide, on n'affiche rien
     if (!displayVal || displayVal === '') return null;
 
-    // --- RÉCUPÉRATION DE LA DEMANDE ORIGINALE ---
-    const rawRequest = preAssignments && preAssignments[agentName] ? preAssignments[agentName][dayNum] : null;
-    const requestedShift = normalize(rawRequest);
+    // --- ANALYSE DE LA DEMANDE (Multi-choix) ---
+    const rawRequest = preAssignments && preAssignments[agentName] ? preAssignments[agentName][dayNum] : '';
     
+    // Parsing : "O, A2" devient ["OFF", "A2"]
+    let allowedCodes: string[] = [];
+    if (rawRequest) {
+        allowedCodes = rawRequest.toString().split(/[,/ ]+/).map((s: string) => normalize(s)).filter((s: string) => s !== '');
+    }
+
+    // Le résultat est-il dans la liste demandée ?
+    const isMatch = allowedCodes.length > 0 && allowedCodes.includes(displayVal);
+
     // Est-ce une demande Soft ?
     const cellKey = `${agentName}_${dayNum}`;
     const isSoft = softConstraints && softConstraints.has(cellKey);
 
-    // --- LOGIQUE DE BORDURE (Le cœur du changement) ---
+    // --- LOGIQUE DE BORDURE (Rouge / Vert / Violet) ---
     const getBorderStyle = () => {
-        // 1. Vue DÉSIDÉRATA : On affiche le Violet si Soft
+        // A. VUE DÉSIDÉRATA
         if (isDesiderataView) {
-            if (isSoft) return '2px solid #9333ea'; // Violet
-            return '1px solid #cbd5e1'; // Bordure standard
+            if (isSoft) return '2px solid #9333ea'; // Violet (Config Soft)
+            return '1px solid #cbd5e1';
         }
 
-        // 2. Vue PLANNING (Résultat)
-        // Si c'était Soft ET que le résultat est différent de la demande -> ROUGE (Violation)
-        if (isSoft && requestedShift && requestedShift !== '' && displayVal !== requestedShift) {
-            return '2px solid #ef4444'; // Rouge vif
+        // B. VUE PLANNING
+        if (allowedCodes.length > 0) {
+            // 1. Respecté -> VERT (Soft ou Hard)
+            if (isMatch) return '2px solid #16a34a'; 
+
+            // 2. Soft non respecté -> ROUGE
+            if (isSoft && !isMatch) return '2px solid #ef4444';
         }
 
-        // Si Match parfait (Soft ou Hard) -> Bleu (si le toggle est activé) ou Violet (si Soft respecté)
-        // Ici, priorité au feedback "Match"
-        const isMatch = requestedShift && requestedShift !== '' && displayVal === requestedShift;
-        if (isMatch && showDesiderataMatch) return '2px solid #2563eb'; // Bleu
-        if (isMatch && isSoft) return '2px solid #9333ea'; // Violet (Match Soft respecté)
-
-        return '1px solid #cbd5e1';
+        return `1px solid ${style.border}`;
     };
 
-    // --- LOGIQUE DE STYLE (Couleur de fond) ---
-    let style = { color: '#334155', bg: '#f1f5f9' }; 
-    const styleKey = displayVal; // On utilise la valeur normalisée (OFF)
+    // --- STYLE DE FOND ---
+    let style = { color: '#334155', bg: '#f1f5f9', border: '#cbd5e1' }; 
+    const styleKey = displayVal; 
 
     switch (styleKey) {
-        case 'M': style = { color: '#2563eb', bg: '#eff6ff' }; break;
+        case 'M': style = { color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' }; break;
         case 'J1':
         case 'J2':
-        case 'J3': style = { color: '#16a34a', bg: '#dcfce7' }; break;
-        case 'A1': style = { color: '#d97706', bg: '#ffedd5' }; break;
-        case 'A2': style = { color: '#dc2626', bg: '#fee2e2' }; break;
-        case 'S': style = { color: '#9333ea', bg: '#f3e8ff' }; break;
-        case 'C': style = { color: '#db2777', bg: '#fce7f3' }; break;
-        case 'OFF': style = { color: '#94a3b8', bg: '#f8fafc' }; break;
+        case 'J3': style = { color: '#16a34a', bg: '#dcfce7', border: '#86efac' }; break;
+        case 'A1': style = { color: '#d97706', bg: '#ffedd5', border: '#fed7aa' }; break;
+        case 'A2': style = { color: '#dc2626', bg: '#fee2e2', border: '#fecaca' }; break;
+        case 'S': style = { color: '#9333ea', bg: '#f3e8ff', border: '#d8b4fe' }; break;
+        case 'C': style = { color: '#db2777', bg: '#fce7f3', border: '#fbcfe8' }; break;
+        case 'OFF': style = { color: '#94a3b8', bg: '#f8fafc', border: '#e2e8f0' }; break;
         case 'FSAU':
-        case 'FH': style = { color: '#b45309', bg: '#fef3c7' }; break;
-        case 'B': style = { color: '#475569', bg: '#ffffff' }; break;
+        case 'FH': style = { color: '#b45309', bg: '#fef3c7', border: '#fde68a' }; break;
+        case 'B': style = { color: '#475569', bg: '#ffffff', border: '#e2e8f0' }; break;
         default: break;
     }
 
-    // --- GESTION DU CLIC DROIT ---
-    // Uniquement actif dans la vue DÉSIDÉRATA
+    // --- INTERACTION ---
     const handleContextMenu = (e: React.MouseEvent) => {
         if (isDesiderataView && onToggleSoft) {
             e.preventDefault(); 
@@ -187,19 +184,20 @@ const ShiftCellRenderer = (props: any) => {
     };
 
     // --- TOOLTIP ---
-    // Affiche la demande d'origine si match ou violation
     let tooltip = undefined;
-    if (requestedShift && requestedShift !== '') {
-        tooltip = `Demande : ${requestedShift}`;
+    if (allowedCodes.length > 0) {
+        tooltip = `Demande : ${rawRequest}`;
         if (isSoft) tooltip += " (Soft)";
-        if (!isDesiderataView && displayVal !== requestedShift) tooltip += " ⚠️ Non respecté";
+        if (!isDesiderataView) {
+             if (isMatch) tooltip += " ✅ Respecté";
+             else tooltip += " ⚠️ Non respecté";
+        }
     }
 
-    // Détection de la bordure pour l'ombre
     const finalBorder = getBorderStyle();
     const isRed = finalBorder.includes('#ef4444');
+    const isGreen = finalBorder.includes('#16a34a');
     const isPurple = finalBorder.includes('#9333ea');
-    const isBlue = finalBorder.includes('#2563eb');
 
     return (
         <div 
@@ -216,18 +214,18 @@ const ShiftCellRenderer = (props: any) => {
                 color: style.color, 
                 border: finalBorder,
                 borderRadius: '6px', 
-                padding: (isRed || isPurple || isBlue) ? '1px 0' : '2px 0', 
+                padding: (isRed || isGreen || isPurple) ? '1px 0' : '2px 0', 
                 fontSize: '10px', 
                 fontWeight: '700',
                 width: '34px',
                 textAlign: 'center', 
                 boxShadow: isRed 
-                    ? '0 0 4px rgba(239, 68, 68, 0.5)' // Ombre Rouge
-                    : (isPurple 
-                        ? '0 0 4px rgba(147, 51, 234, 0.5)' // Ombre Violette
-                        : (isBlue ? '0 0 4px rgba(37,99,235,0.3)' : '0 1px 2px rgba(0,0,0,0.03)')), 
+                    ? '0 0 4px rgba(239, 68, 68, 0.5)' 
+                    : (isGreen 
+                        ? '0 0 4px rgba(22, 163, 74, 0.5)'
+                        : (isPurple ? '0 0 4px rgba(147, 51, 234, 0.5)' : '0 1px 2px rgba(0,0,0,0.03)')), 
                 display: 'inline-block',
-                transform: (isRed || isPurple) ? 'scale(1.05)' : 'scale(1)',
+                transform: (isRed || isGreen || isPurple) ? 'scale(1.05)' : 'scale(1)',
                 transition: 'all 0.1s'
             }}>
                 {displayVal}
@@ -245,7 +243,7 @@ interface PlanningTableProps {
   config: any;
   isDesiderataView?: boolean;
   preAssignments?: any;
-  showDesiderataMatch?: boolean;
+  showDesiderataMatch?: boolean; // (Gardé pour compatibilité, mais logique gérée en interne maintenant)
   zoomLevel?: number;
   softConstraints?: Set<string>;
   onToggleSoft?: (agent: string, day: number) => void;
@@ -351,8 +349,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
         rowData={data || []} 
         columnDefs={columnDefs} 
         components={components} 
-        // IMPORT : On passe isDesiderataView au contexte pour que la cellule sache où elle est
-        context={{ daysList, config, preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView }}
+        context={{ daysList, config, preAssignments, softConstraints, onToggleSoft, isDesiderataView }}
         defaultColDef={{ 
             resizable: true, 
             sortable: false, 
