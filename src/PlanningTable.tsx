@@ -8,10 +8,11 @@ import "ag-grid-community/styles/ag-theme-balham.css";
 
 ModuleRegistry.registerModules([ AllCommunityModule ]);
 
-// --- 1. HEADER PERSONNALISÉ ---
+// --- 1. HEADER PERSONNALISÉ (Affiche les manquants) ---
 const CustomHeader = (props: any) => {
     const { displayName, dayNum, fullDate, api, config } = props;
     
+    // On cherche les shifts définis dans la config, sinon par défaut M, J1, J3
     const targetShifts = config && config.VACATIONS 
         ? Object.keys(config.VACATIONS) 
         : ['M', 'J1', 'J3']; 
@@ -21,14 +22,17 @@ const CustomHeader = (props: any) => {
     if (api) {
         api.forEachNode((node: any) => {
             const val = node.data ? node.data[dayNum] : null;
-            if (val && val !== 'OFF' && val !== 'C' && val !== '') {
+            // On ne compte pas les OFF, C, ou vides comme "présence"
+            if (val && val !== 'OFF' && val !== 'C' && val !== '' && val !== 'O') {
                 presentShifts.add(val);
             }
         });
     }
 
+    // Calcul des manquants
     const missingShifts = targetShifts.filter((code: string) => !presentShifts.has(code));
 
+    // Tri par heure de début si possible
     missingShifts.sort((a: string, b: string) => {
         if (config && config.VACATIONS[a] && config.VACATIONS[b]) {
             return config.VACATIONS[a].debut - config.VACATIONS[b].debut;
@@ -58,7 +62,7 @@ const CustomHeader = (props: any) => {
     );
 };
 
-// --- 2. COMPOSANT CELLULE AGENT ---
+// --- 2. COMPOSANT CELLULE AGENT (Stats & Nom) ---
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
     const rowData = props.data;
@@ -70,7 +74,7 @@ const AgentCellRenderer = (props: any) => {
     if (daysList && rowData && config) {
         daysList.forEach((dayNum: number) => {
             const code = rowData[dayNum.toString()];
-            if (!code || code === '' || code === 'OFF') return;
+            if (!code || code === '' || code === 'OFF' || code === 'O') return;
 
             if (code === 'C') {
                 leaves++;
@@ -87,6 +91,7 @@ const AgentCellRenderer = (props: any) => {
     const isTargetMet = worked >= (target - 1);
     const statsColor = isTargetMet ? '#16a34a' : '#ea580c';
 
+    // TODO: Rendre ça dynamique via la config
     const isBureau = ['GNC'].includes(agentName);
     const isParite = ['WBR', 'PLC', 'KGR', 'FRD'].includes(agentName);
 
@@ -106,29 +111,30 @@ const AgentCellRenderer = (props: any) => {
     );
 };
 
-// --- 3. COMPOSANT CELLULE SHIFT (MODIFIÉ POUR CERCLE VIOLET) ---
+// --- 3. COMPOSANT CELLULE SHIFT (Gestion OFF et Soft) ---
 const ShiftCellRenderer = (props: any) => {
-    const val = props.value;
-    // On récupère les contextes pour le clic droit et l'état
+    const rawVal = props.value;
     const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft } = props.context;
     const agentName = props.data.Agent;
     const dayNum = props.colDef.headerComponentParams.dayNum;
 
-    const requestedShift = preAssignments && preAssignments[agentName] 
-        ? preAssignments[agentName][dayNum] 
-        : null;
+    // Si vide, on n'affiche rien
+    if (!rawVal || rawVal === '') return null;
 
-    const isDesiderataMatch = showDesiderataMatch && requestedShift && requestedShift !== '';
-    
-    // Vérification état Violet
-    const cellKey = `${agentName}_${dayNum}`;
-    const isSoft = softConstraints && softConstraints.has(cellKey);
+    // --- NORMALISATION ---
+    // On transforme O ou 0 en "OFF" pour l'affichage
+    let displayVal = rawVal;
+    let styleKey = rawVal;
 
-    if (!val || val === '' || val === 'OFF') return null;
+    if (rawVal === 'O' || rawVal === 'OFF' || rawVal === '0') {
+        displayVal = 'OFF';
+        styleKey = 'OFF';
+    }
 
+    // --- STYLES ---
     let style = { color: '#334155', bg: '#f1f5f9', border: '#cbd5e1' }; 
 
-    switch (val) {
+    switch (styleKey) {
         case 'M': style = { color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' }; break;
         case 'J1':
         case 'J2':
@@ -137,25 +143,41 @@ const ShiftCellRenderer = (props: any) => {
         case 'A2': style = { color: '#dc2626', bg: '#fee2e2', border: '#fecaca' }; break;
         case 'S': style = { color: '#9333ea', bg: '#f3e8ff', border: '#d8b4fe' }; break;
         case 'C': style = { color: '#db2777', bg: '#fce7f3', border: '#fbcfe8' }; break;
+        
+        // Style spécifique pour OFF
+        case 'OFF': 
+            style = { color: '#94a3b8', bg: '#f8fafc', border: '#e2e8f0' }; 
+            break;
+
         case 'FSAU':
         case 'FH': style = { color: '#b45309', bg: '#fef3c7', border: '#fde68a' }; break;
         case 'B': style = { color: '#475569', bg: '#ffffff', border: '#e2e8f0' }; break;
         default: break;
     }
 
-    // Gestion du Clic Droit
+    // --- GESTION DES BORDURES (Bleu vs Violet) ---
+    const requestedShift = preAssignments && preAssignments[agentName] 
+        ? preAssignments[agentName][dayNum] 
+        : null;
+
+    const isDesiderataMatch = showDesiderataMatch && requestedShift && requestedShift !== '';
+    
+    // Vérification clé Soft
+    const cellKey = `${agentName}_${dayNum}`;
+    const isSoft = softConstraints && softConstraints.has(cellKey);
+
+    const getBorderStyle = () => {
+        if (isSoft) return '2px solid #9333ea'; // Priorité Violette
+        if (isDesiderataMatch) return '2px solid #2563eb'; // Priorité Bleue
+        return `1px solid ${style.border}`;
+    };
+
+    // --- CLIC DROIT ---
     const handleContextMenu = (e: React.MouseEvent) => {
         e.preventDefault(); 
         if (onToggleSoft) {
             onToggleSoft(agentName, dayNum);
         }
-    };
-
-    // Style conditionnel
-    const getBorderStyle = () => {
-        if (isSoft) return '2px solid #9333ea'; // Violet prioritaire
-        if (isDesiderataMatch) return '2px solid #2563eb'; // Bleu si match standard
-        return `1px solid ${style.border}`;
     };
 
     return (
@@ -170,23 +192,22 @@ const ShiftCellRenderer = (props: any) => {
                 border: getBorderStyle(),
                 borderRadius: '6px', 
                 padding: (isDesiderataMatch || isSoft) ? '1px 0' : '2px 0', 
-                fontSize: '11px', 
+                fontSize: '10px', 
                 fontWeight: '700',
-                width: '32px', 
+                width: '34px',
                 textAlign: 'center', 
-                // Ombre portée violette si soft
                 boxShadow: isSoft ? '0 0 4px rgba(147, 51, 234, 0.5)' : (isDesiderataMatch ? '0 0 4px rgba(37,99,235,0.3)' : '0 1px 2px rgba(0,0,0,0.03)'), 
                 display: 'inline-block',
                 transform: isSoft ? 'scale(1.05)' : 'scale(1)',
                 transition: 'all 0.1s'
             }}>
-                {val}
+                {displayVal}
             </span>
         </div>
     );
 };
 
-
+// --- 4. COMPOSANT PRINCIPAL ---
 interface PlanningTableProps {
   data: any[];
   year: number;
@@ -197,7 +218,6 @@ interface PlanningTableProps {
   preAssignments?: any;
   showDesiderataMatch?: boolean;
   zoomLevel?: number;
-  // Nouvelles props
   softConstraints?: Set<string>;
   onToggleSoft?: (agent: string, day: number) => void;
 }
@@ -258,9 +278,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
       cols.push({
         field: dayStr,
         width: 52, 
-        
         headerClass: isWeekend ? 'weekend-header' : '',
-
         headerComponentParams: {
             displayName: dayName,
             dayNum: dayNum,
@@ -268,7 +286,6 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
             config: config 
         },
         cellRenderer: 'shiftCellRenderer',
-        
         cellStyle: { 
             display: 'flex', justifyContent: 'center', alignItems: 'center', 
             borderRight: '1px solid #cbd5e1', 
