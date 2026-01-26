@@ -8,11 +8,10 @@ import "ag-grid-community/styles/ag-theme-balham.css";
 
 ModuleRegistry.registerModules([ AllCommunityModule ]);
 
-// --- 1. HEADER PERSONNALISÉ (Affiche les manquants) ---
+// --- 1. HEADER PERSONNALISÉ ---
 const CustomHeader = (props: any) => {
     const { displayName, dayNum, fullDate, api, config } = props;
     
-    // On cherche les shifts définis dans la config, sinon par défaut M, J1, J3
     const targetShifts = config && config.VACATIONS 
         ? Object.keys(config.VACATIONS) 
         : ['M', 'J1', 'J3']; 
@@ -22,17 +21,14 @@ const CustomHeader = (props: any) => {
     if (api) {
         api.forEachNode((node: any) => {
             const val = node.data ? node.data[dayNum] : null;
-            // On ne compte pas les OFF, C, ou vides comme "présence"
             if (val && val !== 'OFF' && val !== 'C' && val !== '' && val !== 'O') {
                 presentShifts.add(val);
             }
         });
     }
 
-    // Calcul des manquants
     const missingShifts = targetShifts.filter((code: string) => !presentShifts.has(code));
 
-    // Tri par heure de début si possible
     missingShifts.sort((a: string, b: string) => {
         if (config && config.VACATIONS[a] && config.VACATIONS[b]) {
             return config.VACATIONS[a].debut - config.VACATIONS[b].debut;
@@ -62,7 +58,7 @@ const CustomHeader = (props: any) => {
     );
 };
 
-// --- 2. COMPOSANT CELLULE AGENT (Stats & Nom) ---
+// --- 2. COMPOSANT CELLULE AGENT ---
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
     const rowData = props.data;
@@ -91,7 +87,6 @@ const AgentCellRenderer = (props: any) => {
     const isTargetMet = worked >= (target - 1);
     const statsColor = isTargetMet ? '#16a34a' : '#ea580c';
 
-    // TODO: Rendre ça dynamique via la config
     const isBureau = ['GNC'].includes(agentName);
     const isParite = ['WBR', 'PLC', 'KGR', 'FRD'].includes(agentName);
 
@@ -111,94 +106,128 @@ const AgentCellRenderer = (props: any) => {
     );
 };
 
-// --- 3. COMPOSANT CELLULE SHIFT (Gestion OFF et Soft) ---
+// --- 3. COMPOSANT CELLULE SHIFT (LOGIQUE SOFT & VIOLATION) ---
 const ShiftCellRenderer = (props: any) => {
     const rawVal = props.value;
-    const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft } = props.context;
+    // On récupère isDesiderataView du contexte pour savoir dans quel onglet on est
+    const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView } = props.context;
     const agentName = props.data.Agent;
     const dayNum = props.colDef.headerComponentParams.dayNum;
 
-    // Si vide, on n'affiche rien
-    if (!rawVal || rawVal === '') return null;
-
     // --- NORMALISATION ---
-    // On transforme O ou 0 en "OFF" pour l'affichage
-    let displayVal = rawVal;
-    let styleKey = rawVal;
+    const normalize = (v: any) => {
+        if (!v) return '';
+        if (v === 'O' || v === 'OFF' || v === '0') return 'OFF';
+        return v;
+    };
 
-    if (rawVal === 'O' || rawVal === 'OFF' || rawVal === '0') {
-        displayVal = 'OFF';
-        styleKey = 'OFF';
-    }
-
-    // --- STYLES ---
-    let style = { color: '#334155', bg: '#f1f5f9', border: '#cbd5e1' }; 
-
-    switch (styleKey) {
-        case 'M': style = { color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' }; break;
-        case 'J1':
-        case 'J2':
-        case 'J3': style = { color: '#16a34a', bg: '#dcfce7', border: '#86efac' }; break;
-        case 'A1': style = { color: '#d97706', bg: '#ffedd5', border: '#fed7aa' }; break;
-        case 'A2': style = { color: '#dc2626', bg: '#fee2e2', border: '#fecaca' }; break;
-        case 'S': style = { color: '#9333ea', bg: '#f3e8ff', border: '#d8b4fe' }; break;
-        case 'C': style = { color: '#db2777', bg: '#fce7f3', border: '#fbcfe8' }; break;
-        
-        // Style spécifique pour OFF
-        case 'OFF': 
-            style = { color: '#94a3b8', bg: '#f8fafc', border: '#e2e8f0' }; 
-            break;
-
-        case 'FSAU':
-        case 'FH': style = { color: '#b45309', bg: '#fef3c7', border: '#fde68a' }; break;
-        case 'B': style = { color: '#475569', bg: '#ffffff', border: '#e2e8f0' }; break;
-        default: break;
-    }
-
-    // --- GESTION DES BORDURES (Bleu vs Violet) ---
-    const requestedShift = preAssignments && preAssignments[agentName] 
-        ? preAssignments[agentName][dayNum] 
-        : null;
-
-    const isDesiderataMatch = showDesiderataMatch && requestedShift && requestedShift !== '';
+    const displayVal = normalize(rawVal);
     
-    // Vérification clé Soft
+    // Si vide, on n'affiche rien
+    if (!displayVal || displayVal === '') return null;
+
+    // --- RÉCUPÉRATION DE LA DEMANDE ORIGINALE ---
+    const rawRequest = preAssignments && preAssignments[agentName] ? preAssignments[agentName][dayNum] : null;
+    const requestedShift = normalize(rawRequest);
+    
+    // Est-ce une demande Soft ?
     const cellKey = `${agentName}_${dayNum}`;
     const isSoft = softConstraints && softConstraints.has(cellKey);
 
+    // --- LOGIQUE DE BORDURE (Le cœur du changement) ---
     const getBorderStyle = () => {
-        if (isSoft) return '2px solid #9333ea'; // Priorité Violette
-        if (isDesiderataMatch) return '2px solid #2563eb'; // Priorité Bleue
-        return `1px solid ${style.border}`;
+        // 1. Vue DÉSIDÉRATA : On affiche le Violet si Soft
+        if (isDesiderataView) {
+            if (isSoft) return '2px solid #9333ea'; // Violet
+            return '1px solid #cbd5e1'; // Bordure standard
+        }
+
+        // 2. Vue PLANNING (Résultat)
+        // Si c'était Soft ET que le résultat est différent de la demande -> ROUGE (Violation)
+        if (isSoft && requestedShift && requestedShift !== '' && displayVal !== requestedShift) {
+            return '2px solid #ef4444'; // Rouge vif
+        }
+
+        // Si Match parfait (Soft ou Hard) -> Bleu (si le toggle est activé) ou Violet (si Soft respecté)
+        // Ici, priorité au feedback "Match"
+        const isMatch = requestedShift && requestedShift !== '' && displayVal === requestedShift;
+        if (isMatch && showDesiderataMatch) return '2px solid #2563eb'; // Bleu
+        if (isMatch && isSoft) return '2px solid #9333ea'; // Violet (Match Soft respecté)
+
+        return '1px solid #cbd5e1';
     };
 
-    // --- CLIC DROIT ---
+    // --- LOGIQUE DE STYLE (Couleur de fond) ---
+    let style = { color: '#334155', bg: '#f1f5f9' }; 
+    const styleKey = displayVal; // On utilise la valeur normalisée (OFF)
+
+    switch (styleKey) {
+        case 'M': style = { color: '#2563eb', bg: '#eff6ff' }; break;
+        case 'J1':
+        case 'J2':
+        case 'J3': style = { color: '#16a34a', bg: '#dcfce7' }; break;
+        case 'A1': style = { color: '#d97706', bg: '#ffedd5' }; break;
+        case 'A2': style = { color: '#dc2626', bg: '#fee2e2' }; break;
+        case 'S': style = { color: '#9333ea', bg: '#f3e8ff' }; break;
+        case 'C': style = { color: '#db2777', bg: '#fce7f3' }; break;
+        case 'OFF': style = { color: '#94a3b8', bg: '#f8fafc' }; break;
+        case 'FSAU':
+        case 'FH': style = { color: '#b45309', bg: '#fef3c7' }; break;
+        case 'B': style = { color: '#475569', bg: '#ffffff' }; break;
+        default: break;
+    }
+
+    // --- GESTION DU CLIC DROIT ---
+    // Uniquement actif dans la vue DÉSIDÉRATA
     const handleContextMenu = (e: React.MouseEvent) => {
-        e.preventDefault(); 
-        if (onToggleSoft) {
+        if (isDesiderataView && onToggleSoft) {
+            e.preventDefault(); 
             onToggleSoft(agentName, dayNum);
         }
     };
 
+    // --- TOOLTIP ---
+    // Affiche la demande d'origine si match ou violation
+    let tooltip = undefined;
+    if (requestedShift && requestedShift !== '') {
+        tooltip = `Demande : ${requestedShift}`;
+        if (isSoft) tooltip += " (Soft)";
+        if (!isDesiderataView && displayVal !== requestedShift) tooltip += " ⚠️ Non respecté";
+    }
+
+    // Détection de la bordure pour l'ombre
+    const finalBorder = getBorderStyle();
+    const isRed = finalBorder.includes('#ef4444');
+    const isPurple = finalBorder.includes('#9333ea');
+    const isBlue = finalBorder.includes('#2563eb');
+
     return (
         <div 
             onContextMenu={handleContextMenu}
-            title={isSoft ? "Priorité basse (Clic droit)" : (isDesiderataMatch ? `Désidérata d'origine : ${requestedShift}` : undefined)}
-            style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', width: '100%', cursor: 'context-menu'}}
+            title={tooltip}
+            style={{
+                display: 'flex', justifyContent: 'center', alignItems: 'center', 
+                height: '100%', width: '100%', 
+                cursor: isDesiderataView ? 'context-menu' : 'default'
+            }}
         >
             <span style={{
                 backgroundColor: style.bg, 
                 color: style.color, 
-                border: getBorderStyle(),
+                border: finalBorder,
                 borderRadius: '6px', 
-                padding: (isDesiderataMatch || isSoft) ? '1px 0' : '2px 0', 
+                padding: (isRed || isPurple || isBlue) ? '1px 0' : '2px 0', 
                 fontSize: '10px', 
                 fontWeight: '700',
                 width: '34px',
                 textAlign: 'center', 
-                boxShadow: isSoft ? '0 0 4px rgba(147, 51, 234, 0.5)' : (isDesiderataMatch ? '0 0 4px rgba(37,99,235,0.3)' : '0 1px 2px rgba(0,0,0,0.03)'), 
+                boxShadow: isRed 
+                    ? '0 0 4px rgba(239, 68, 68, 0.5)' // Ombre Rouge
+                    : (isPurple 
+                        ? '0 0 4px rgba(147, 51, 234, 0.5)' // Ombre Violette
+                        : (isBlue ? '0 0 4px rgba(37,99,235,0.3)' : '0 1px 2px rgba(0,0,0,0.03)')), 
                 display: 'inline-block',
-                transform: isSoft ? 'scale(1.05)' : 'scale(1)',
+                transform: (isRed || isPurple) ? 'scale(1.05)' : 'scale(1)',
                 transition: 'all 0.1s'
             }}>
                 {displayVal}
@@ -322,7 +351,8 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
         rowData={data || []} 
         columnDefs={columnDefs} 
         components={components} 
-        context={{ daysList, config, preAssignments, showDesiderataMatch, softConstraints, onToggleSoft }}
+        // IMPORT : On passe isDesiderataView au contexte pour que la cellule sache où elle est
+        context={{ daysList, config, preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView }}
         defaultColDef={{ 
             resizable: true, 
             sortable: false, 
