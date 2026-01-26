@@ -99,15 +99,14 @@ const AgentCellRenderer = (props: any) => {
     );
 };
 
-// --- 3. COMPOSANT CELLULE SHIFT (LOGIQUE CORRECTIVE) ---
+// --- 3. COMPOSANT CELLULE SHIFT ---
 const ShiftCellRenderer = (props: any) => {
     const rawVal = props.value;
-    const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView } = props.context;
+    const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView, hideOff } = props.context;
     const agentName = props.data.Agent;
     const dayNum = props.colDef.headerComponentParams.dayNum;
 
     // --- NORMALISATION ---
-    // Transforme O/0 en OFF pour la comparaison et l'affichage
     const normalize = (v: any) => {
         if (!v) return '';
         const s = v.toString().trim().toUpperCase();
@@ -117,53 +116,50 @@ const ShiftCellRenderer = (props: any) => {
 
     const displayVal = normalize(rawVal);
     
-    // Si la cellule est vide, on n'affiche rien
+    // Si vide, on n'affiche rien
     if (!displayVal || displayVal === '') return null;
 
-    // --- ANALYSE DE LA DEMANDE (Parsing Multi-choix) ---
+    // --- MASQUER OFF (NOUVEAU) ---
+    // Si l'option est activée ET que la valeur est OFF, on retourne null (case vide)
+    // Sauf si on est dans la vue Desiderata (où on veut voir ce qu'on a demandé)
+    if (hideOff && displayVal === 'OFF' && !isDesiderataView) {
+        return null;
+    }
+
+    // --- ANALYSE DE LA DEMANDE ---
     const rawRequest = preAssignments && preAssignments[agentName] ? preAssignments[agentName][dayNum] : '';
     
-    // On transforme "O, A2, S" en ["OFF", "A2", "S"]
     let allowedCodes: string[] = [];
     if (rawRequest) {
         allowedCodes = rawRequest.toString()
-            .split(/[,/ ]+/) // Sépare par virgule, slash ou espace
+            .split(/[,/ ]+/)
             .map((s: string) => normalize(s))
             .filter((s: string) => s !== '');
     }
 
     const hasRequest = allowedCodes.length > 0;
-    // Est-ce que ce qu'on a obtenu fait partie de ce qu'on a demandé ?
     const isMatch = hasRequest && allowedCodes.includes(displayVal);
-
-    // Est-ce configuré en Soft ?
     const cellKey = `${agentName}_${dayNum}`;
     const isSoft = softConstraints && softConstraints.has(cellKey);
 
-    // --- LOGIQUE DE BORDURE (Le cœur de votre demande) ---
+    // --- BORDURES ---
     const getBorderStyle = () => {
-        // A. VUE DÉSIDÉRATA (Configuration)
-        // Ici on montre juste si c'est configuré en Soft (Violet) ou Hard (Gris)
+        // Vue Désidérata
         if (isDesiderataView) {
-            if (isSoft) return '2px solid #9333ea'; // Violet
+            if (isSoft) return '2px solid #9333ea'; 
             return '1px solid #cbd5e1';
         }
 
-        // B. VUE PLANNING (Résultat)
-        // On n'active les couleurs que si le bouton "Demandes" est actif
+        // Vue Planning
         if (showDesiderataMatch && hasRequest) {
-            // Si le planning respecte la demande -> VERT
-            if (isMatch) return '2px solid #16a34a'; 
-            
-            // Si le planning NE respecte PAS la demande (qu'elle soit Soft ou Hard) -> ROUGE
-            return '2px solid #ef4444';
+            if (isMatch) return '2px solid #16a34a'; // Vert (OK)
+            return '2px solid #ef4444'; // Rouge (KO)
         }
 
-        // Bordure standard si pas de demande ou bouton inactif
         return `1px solid ${style.border}`;
     };
 
-    // --- STYLE DE FOND ---
+    // --- STYLES ---
     let style = { color: '#334155', bg: '#f1f5f9', border: '#cbd5e1' }; 
     const styleKey = displayVal; 
 
@@ -183,16 +179,13 @@ const ShiftCellRenderer = (props: any) => {
         default: break;
     }
 
-    // --- INTERACTION ---
     const handleContextMenu = (e: React.MouseEvent) => {
-        // Clic droit uniquement autorisé dans la vue Désidérata
         if (isDesiderataView && onToggleSoft) {
             e.preventDefault(); 
             onToggleSoft(agentName, dayNum);
         }
     };
 
-    // --- TOOLTIP ---
     let tooltip = undefined;
     if (hasRequest) {
         tooltip = `Demande : ${rawRequest}`;
@@ -229,9 +222,9 @@ const ShiftCellRenderer = (props: any) => {
                 width: '34px',
                 textAlign: 'center', 
                 boxShadow: isRed 
-                    ? '0 0 4px rgba(239, 68, 68, 0.5)' // Ombre Rouge
+                    ? '0 0 4px rgba(239, 68, 68, 0.5)' 
                     : (isGreen 
-                        ? '0 0 4px rgba(22, 163, 74, 0.5)' // Ombre Verte
+                        ? '0 0 4px rgba(22, 163, 74, 0.5)'
                         : (isPurple ? '0 0 4px rgba(147, 51, 234, 0.5)' : '0 1px 2px rgba(0,0,0,0.03)')), 
                 display: 'inline-block',
                 transform: (isRed || isGreen || isPurple) ? 'scale(1.05)' : 'scale(1)',
@@ -256,6 +249,7 @@ interface PlanningTableProps {
   zoomLevel?: number;
   softConstraints?: Set<string>;
   onToggleSoft?: (agent: string, day: number) => void;
+  hideOff?: boolean; // NOUVELLE PROP
 }
 
 const PlanningTable: React.FC<PlanningTableProps> = ({ 
@@ -265,7 +259,8 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
   showDesiderataMatch = false,
   zoomLevel = 100,
   softConstraints,
-  onToggleSoft
+  onToggleSoft,
+  hideOff = false // Valeur par défaut
 }) => {
 
   const components = useMemo(() => ({
@@ -358,7 +353,8 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
         rowData={data || []} 
         columnDefs={columnDefs} 
         components={components} 
-        context={{ daysList, config, preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView }}
+        // Ajout de hideOff au contexte
+        context={{ daysList, config, preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView, hideOff }}
         defaultColDef={{ 
             resizable: true, 
             sortable: false, 
