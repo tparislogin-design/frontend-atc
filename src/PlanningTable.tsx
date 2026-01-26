@@ -58,26 +58,54 @@ const CustomHeader = (props: any) => {
     );
 };
 
-// --- 2. COMPOSANT CELLULE AGENT ---
+// --- 2. COMPOSANT CELLULE AGENT (Mis à jour avec compteur refus) ---
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
     const rowData = props.data;
-    const { daysList, config } = props.context; 
+    // Ajout de preAssignments ici
+    const { daysList, config, preAssignments } = props.context; 
+
+    // Helper de normalisation
+    const normalize = (v: any) => {
+        if (!v) return '';
+        const s = v.toString().trim().toUpperCase();
+        if (s === 'O' || s === 'OFF' || s === '0') return 'OFF';
+        return s;
+    };
 
     let worked = 0;
     let leaves = 0;
+    let refusedCount = 0; // Nouveau compteur
 
     if (daysList && rowData && config) {
         daysList.forEach((dayNum: number) => {
-            const code = rowData[dayNum.toString()];
-            if (!code || code === '' || code === 'OFF' || code === 'O') return;
+            const dayStr = dayNum.toString();
+            const actualCode = normalize(rowData[dayStr]);
 
-            if (code === 'C') {
-                leaves++;
-            } else {
-                const isKnownShift = config.VACATIONS[code] !== undefined 
-                                     || ['M', 'J1', 'J2', 'J3', 'S', 'A1', 'A2'].includes(code);
-                if (isKnownShift) worked++;
+            // Stats de travail
+            if (actualCode && actualCode !== '' && actualCode !== 'OFF') {
+                if (actualCode === 'C') {
+                    leaves++;
+                } else {
+                    const isKnownShift = config.VACATIONS[actualCode] !== undefined 
+                                         || ['M', 'J1', 'J2', 'J3', 'S', 'A1', 'A2'].includes(actualCode);
+                    if (isKnownShift) worked++;
+                }
+            }
+
+            // Calcul des Refus
+            if (preAssignments && preAssignments[agentName]) {
+                const rawRequest = preAssignments[agentName][dayStr];
+                if (rawRequest) {
+                    const allowed = rawRequest.toString()
+                        .split(/[,/ ]+/)
+                        .map((s: string) => normalize(s))
+                        .filter((s: string) => s !== '');
+                    
+                    if (allowed.length > 0 && !allowed.includes(actualCode)) {
+                        refusedCount++;
+                    }
+                }
             }
         });
     }
@@ -92,8 +120,22 @@ const AgentCellRenderer = (props: any) => {
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                 <span style={{fontWeight:'700', fontSize: 13, color: '#334155'}}>{agentName}</span>
             </div>
-            <div style={{fontSize: 10, color: statsColor, fontWeight: 700, marginTop: 2}}>
-                {worked} <span style={{color:'#cbd5e1', fontWeight:400}}>/</span> {target}
+            <div style={{display:'flex', alignItems:'center', gap: 8, marginTop: 2}}>
+                <div style={{fontSize: 10, color: statsColor, fontWeight: 700}}>
+                    {worked} <span style={{color:'#cbd5e1', fontWeight:400}}>/</span> {target}
+                </div>
+                {refusedCount > 0 && (
+                    <div 
+                        title={`${refusedCount} demande(s) non respectée(s)`}
+                        style={{
+                            fontSize: 9, color: '#ef4444', fontWeight: '800', 
+                            background: '#fee2e2', padding: '1px 4px', borderRadius: '4px',
+                            border: '1px solid #fca5a5'
+                        }}
+                    >
+                        {refusedCount} ⚠️
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -106,7 +148,6 @@ const ShiftCellRenderer = (props: any) => {
     const agentName = props.data.Agent;
     const dayNum = props.colDef.headerComponentParams.dayNum;
 
-    // --- NORMALISATION ---
     const normalize = (v: any) => {
         if (!v) return '';
         const s = v.toString().trim().toUpperCase();
@@ -116,17 +157,13 @@ const ShiftCellRenderer = (props: any) => {
 
     const displayVal = normalize(rawVal);
     
-    // Si vide, on n'affiche rien
     if (!displayVal || displayVal === '') return null;
 
-    // --- MASQUER OFF (NOUVEAU) ---
-    // Si l'option est activée ET que la valeur est OFF, on retourne null (case vide)
-    // Sauf si on est dans la vue Desiderata (où on veut voir ce qu'on a demandé)
+    // Option Masquer OFF (sauf vue Desiderata)
     if (hideOff && displayVal === 'OFF' && !isDesiderataView) {
         return null;
     }
 
-    // --- ANALYSE DE LA DEMANDE ---
     const rawRequest = preAssignments && preAssignments[agentName] ? preAssignments[agentName][dayNum] : '';
     
     let allowedCodes: string[] = [];
@@ -142,24 +179,20 @@ const ShiftCellRenderer = (props: any) => {
     const cellKey = `${agentName}_${dayNum}`;
     const isSoft = softConstraints && softConstraints.has(cellKey);
 
-    // --- BORDURES ---
     const getBorderStyle = () => {
-        // Vue Désidérata
         if (isDesiderataView) {
             if (isSoft) return '2px solid #9333ea'; 
             return '1px solid #cbd5e1';
         }
 
-        // Vue Planning
         if (showDesiderataMatch && hasRequest) {
-            if (isMatch) return '2px solid #16a34a'; // Vert (OK)
-            return '2px solid #ef4444'; // Rouge (KO)
+            if (isMatch) return '2px solid #16a34a'; 
+            return '2px solid #ef4444'; 
         }
 
         return `1px solid ${style.border}`;
     };
 
-    // --- STYLES ---
     let style = { color: '#334155', bg: '#f1f5f9', border: '#cbd5e1' }; 
     const styleKey = displayVal; 
 
@@ -249,7 +282,7 @@ interface PlanningTableProps {
   zoomLevel?: number;
   softConstraints?: Set<string>;
   onToggleSoft?: (agent: string, day: number) => void;
-  hideOff?: boolean; // NOUVELLE PROP
+  hideOff?: boolean; 
 }
 
 const PlanningTable: React.FC<PlanningTableProps> = ({ 
@@ -260,7 +293,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
   zoomLevel = 100,
   softConstraints,
   onToggleSoft,
-  hideOff = false // Valeur par défaut
+  hideOff = false 
 }) => {
 
   const components = useMemo(() => ({
@@ -353,7 +386,6 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
         rowData={data || []} 
         columnDefs={columnDefs} 
         components={components} 
-        // Ajout de hideOff au contexte
         context={{ daysList, config, preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView, hideOff }}
         defaultColDef={{ 
             resizable: true, 
