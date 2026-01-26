@@ -190,6 +190,13 @@ function App() {
     setStatus({type:'loading', msg:'📡 Lecture...'});
     try {
         const data = await parseGoogleSheet(sheetUrl, startDay, endDay); 
+
+        // --- DEBUT DEBUG ---
+        console.log("1. Total agents trouvés :", Object.keys(data).length);
+        console.log("2. Liste des agents :", Object.keys(data));
+        console.log("3. Données brutes reçues :", data);
+        // --- FIN DEBUG ---
+
         setPreAssignments(data);
         setSoftConstraints(new Set()); // Reset des contraintes violettes au nouvel import
         setStatus({type:'success', msg: `✅ Import OK (${Object.keys(data).length} agents)`});
