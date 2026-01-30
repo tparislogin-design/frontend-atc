@@ -46,6 +46,7 @@ const TimeInput = ({ val, onSave }: { val: number, onSave: (v: number) => void }
 
 function App() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
+  
   const [year, setYear] = useState(2026);
   const [startDay, setStartDay] = useState(1); 
   const [endDay, setEndDay] = useState(28);
@@ -56,7 +57,8 @@ function App() {
   
   const [softConstraints, setSoftConstraints] = useState<Set<string>>(new Set());
   const [hideOff, setHideOff] = useState(false);
-  // NOUVEL ÉTAT : Couverture Optionnelle { "1": ["M", "S"] }
+  
+  // Format : { "1": ["M", "S"] }
   const [optionalCoverage, setOptionalCoverage] = useState<Record<string, string[]>>({});
 
   const [loading, setLoading] = useState(false);
@@ -118,7 +120,7 @@ function App() {
       if (e.target.files[0]) fr.readAsText(e.target.files[0]);
   };
 
-  // --- TOGGLES ---
+  // --- GESTION SOFT/HARD ---
   const handleToggleSoft = (agent: string, day: number) => {
       const key = `${agent}_${day}`;
       const s = new Set(softConstraints);
@@ -135,7 +137,9 @@ function App() {
       setSoftConstraints(softConstraints.size === count ? new Set() : all);
   };
 
-  // --- NOUVEAU : TOGGLE OPTIONAL COVERAGE ---
+  // --- GESTION COUVERTURE OPTIONNELLE ---
+  
+  // 1. Bascule pour 1 jour
   const handleToggleOptionalCoverage = (dayNum: number, shiftCode: string) => {
       const dayStr = dayNum.toString();
       const current = optionalCoverage[dayStr] || [];
@@ -143,6 +147,40 @@ function App() {
       if (current.includes(shiftCode)) next = current.filter(s => s !== shiftCode);
       else next = [...current, shiftCode];
       setOptionalCoverage({ ...optionalCoverage, [dayStr]: next });
+  };
+
+  // 2. Bascule GLOBALE (Toute la période) - NOUVEAU
+  const handleToggleGlobalOptional = (shiftCode: string) => {
+      // Générer la liste de tous les jours
+      const daysList = [];
+      if (startDay <= endDay) {
+          for (let i = startDay; i <= endDay; i++) daysList.push(i.toString());
+      } else {
+          for (let i = startDay; i <= 365; i++) daysList.push(i.toString());
+          for (let i = 1; i <= endDay; i++) daysList.push(i.toString());
+      }
+
+      // Vérifier si le shift est déjà optionnel PARTOUT
+      const isAlreadyOptionalEverywhere = daysList.every(dayStr => {
+          return optionalCoverage[dayStr] && optionalCoverage[dayStr].includes(shiftCode);
+      });
+
+      const newCoverage = { ...optionalCoverage };
+
+      daysList.forEach(dayStr => {
+          const currentList = newCoverage[dayStr] || [];
+          if (isAlreadyOptionalEverywhere) {
+              // On retire partout (Redevient Rouge/Obligatoire)
+              newCoverage[dayStr] = currentList.filter(s => s !== shiftCode);
+          } else {
+              // On ajoute partout (Devient Bleu/Optionnel)
+              if (!currentList.includes(shiftCode)) {
+                  newCoverage[dayStr] = [...currentList, shiftCode];
+              }
+          }
+      });
+
+      setOptionalCoverage(newCoverage);
   };
 
   const handleImport = async () => {
@@ -162,7 +200,7 @@ function App() {
               year, start_day: startDay, end_day: endDay, config,
               pre_assignments: preAssignments,
               soft_assignments: Array.from(softConstraints),
-              optional_coverage: optionalCoverage // Transmission
+              optional_coverage: optionalCoverage
           });
           if (res.data.data) { setPlanning(res.data.data); setStatus({type:'success', msg:'Généré !'}); setActiveTab('planning'); }
           else setStatus({type:'error', msg:'Infeasible'});
@@ -183,13 +221,13 @@ function App() {
             </div>
             <div style={{display:'flex', gap:10, alignItems:'center'}}>
                 {activeTab === 'planning' && (
-                    <>
-                        <button onClick={() => setShowDesiderataMatch(!showDesiderataMatch)} style={{background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', padding:'6px', borderRadius:6, cursor:'pointer'}}>👁️ Demandes</button>
-                        <button onClick={() => setHideOff(!hideOff)} style={{background:'#f1f5f9', color:'#475569', border:'1px solid #cbd5e1', padding:'6px', borderRadius:6, cursor:'pointer'}}>{hideOff ? 'Afficher OFF' : 'Masquer OFF'}</button>
-                    </>
+                    <div style={{display:'flex', gap: 5}}>
+                        <button onClick={() => setShowDesiderataMatch(!showDesiderataMatch)} style={{background: showDesiderataMatch ? '#e0f2fe' : 'transparent', color: showDesiderataMatch ? '#0284c7' : '#64748b', border: showDesiderataMatch ? '1px solid #7dd3fc' : '1px solid #e2e8f0', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600}}>{showDesiderataMatch ? '👁️ Masquer Demandes' : '👁️ Voir Demandes'}</button>
+                        <button onClick={() => setHideOff(!hideOff)} style={{background: hideOff ? '#f1f5f9' : 'transparent', color: hideOff ? '#334155' : '#64748b', border: hideOff ? '1px solid #cbd5e1' : '1px solid #e2e8f0', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600}}>{hideOff ? '👻 Voir OFF' : '👻 Masquer OFF'}</button>
+                    </div>
                 )}
                 {activeTab === 'desiderata' && (
-                    <button onClick={handleToggleAllSoft} style={{background:'#f3e8ff', color:'#9333ea', border:'1px solid #d8b4fe', padding:'6px', borderRadius:6, cursor:'pointer'}}>🟣 Tout Soft</button>
+                    <button onClick={handleToggleAllSoft} style={{background:'#f3e8ff', color:'#9333ea', border:'1px solid #d8b4fe', padding:'6px', borderRadius:6, cursor:'pointer'}} title="Priorité basse (Violet)">{softConstraints.size > 0 ? '🟣 Tout Reset' : '🟣 Tout Soft'}</button>
                 )}
                 <input type="range" min="50" max="150" value={zoomLevel} onChange={e => setZoomLevel(Number(e.target.value))} style={{width:80}} />
                 <button onClick={handleOptimize} disabled={loading} style={{background:'#2563eb', color:'white', border:'none', padding:'8px 16px', borderRadius:6, cursor:'pointer'}}>{loading ? '...' : '⚡ Générer'}</button>
@@ -208,7 +246,10 @@ function App() {
                             showDesiderataMatch={activeTab === 'planning' ? showDesiderataMatch : false}
                             softConstraints={softConstraints} onToggleSoft={handleToggleSoft}
                             zoomLevel={zoomLevel} hideOff={hideOff}
-                            optionalCoverage={optionalCoverage} onToggleOptionalCoverage={handleToggleOptionalCoverage}
+                            // Props Couverture Optionnelle
+                            optionalCoverage={optionalCoverage} 
+                            onToggleOptionalCoverage={handleToggleOptionalCoverage}
+                            onToggleGlobalOptional={handleToggleGlobalOptional} // NOUVEAU
                         />
                     )}
                     {activeTab === 'bilan' && <Bilan planning={planning} config={config} year={year} startDay={startDay} endDay={endDay} />}
@@ -218,46 +259,75 @@ function App() {
 
             {showSidebar && (
                 <div style={{width:320, background:'white', borderLeft:'1px solid #e2e8f0', padding:20, overflowY:'auto'}}>
-                    <h3 style={{fontSize:12, color:'#94a3b8', textTransform:'uppercase'}}>Sauvegarde</h3>
-                    <div style={{display:'flex', gap:5, marginBottom:20}}>
-                        <button onClick={handleExportConfig} style={{flex:1, padding:8, background:'#f8fafc', border:'1px solid #cbd5e1', borderRadius:4, cursor:'pointer'}}>⬇️ JSON</button>
-                        <label style={{flex:1, padding:8, background:'#f8fafc', border:'1px solid #cbd5e1', borderRadius:4, cursor:'pointer', textAlign:'center'}}>⬆️ Load<input type="file" onChange={handleImportConfig} style={{display:'none'}}/></label>
-                    </div>
-
-                    <h3 style={{fontSize:12, color:'#94a3b8', textTransform:'uppercase'}}>Données</h3>
-                    <input type="text" value={sheetUrl} onChange={e=>setSheetUrl(e.target.value)} style={{width:'100%', padding:6, border:'1px solid #cbd5e1', borderRadius:4, marginBottom:5}} />
-                    <button onClick={handleImport} style={{width:'100%', padding:8, background:'#22c55e', color:'white', border:'none', borderRadius:4, cursor:'pointer', marginBottom:20}}>Importer</button>
-
-                    <h3 style={{fontSize:12, color:'#94a3b8', textTransform:'uppercase'}}>Paramètres</h3>
-                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:20}}>
-                        <label>Année <input type="number" value={year} onChange={e=>handleYearChange(e.target.value)} style={{width:'100%'}} /></label>
-                        <label>Début <input type="number" value={startDay} onChange={e=>setStartDay(Number(e.target.value))} style={{width:'100%'}} /></label>
-                        <label>Fin <input type="number" value={endDay} onChange={e=>setEndDay(Number(e.target.value))} style={{width:'100%'}} /></label>
-                        <label>Time <input type="number" value={config.CONTRAT.SOLVER_TIME_LIMIT} onChange={e=>handleContratChange('SOLVER_TIME_LIMIT', e.target.value)} style={{width:'100%'}} /></label>
-                    </div>
-
-                    <h3 style={{fontSize:12, color:'#2563eb', textTransform:'uppercase'}}>Bureau</h3>
-                    <div style={{display:'flex', flexWrap:'wrap', gap:5, marginBottom:20}}>
-                        <button onClick={handleAddBureau} style={{fontSize:10, padding:'2px 6px'}}>+ Ajout</button>
-                        {config.CONTROLLERS_AFFECTES_BUREAU?.map(a => <span key={a} onClick={()=>handleRemoveBureau(a)} style={{background:'#eff6ff', padding:'2px 6px', borderRadius:4, fontSize:11, cursor:'pointer'}}>{a} ×</span>)}
-                    </div>
-
-                    <h3 style={{fontSize:12, color:'#10b981', textTransform:'uppercase'}}>Vacations</h3>
-                    <button onClick={handleAddVacation} style={{fontSize:10, padding:'2px 6px', marginBottom:5}}>+ Ajout</button>
-                    {Object.entries(config.VACATIONS).map(([k,v]:any) => (
-                        <div key={k} style={{display:'flex', alignItems:'center', gap:5, marginBottom:5}}>
-                            <span style={{width:30, fontWeight:'bold', fontSize:11}}>{k}</span>
-                            <TimeInput val={v.debut} onSave={val=>handleChangeVacation(k,'debut',val)} />
-                            <span style={{fontSize:10}}>➜</span>
-                            <TimeInput val={v.fin} onSave={val=>handleChangeVacation(k,'fin',val)} />
-                            <span onClick={()=>handleDeleteVacation(k)} style={{color:'red', cursor:'pointer'}}>×</span>
+                    {/* ... Sidebar inchangée ... */}
+                    <div style={sidebarSectionStyle}>
+                        <h3 style={{...sidebarTitleStyle, color:'#8b5cf6'}}>💾 SAUVEGARDE CONFIG</h3>
+                        <div style={{display:'flex', gap:10}}>
+                            <button onClick={handleExportConfig} style={{flex:1, padding:'8px', background:'#f3f4f6', border:'1px solid #d1d5db', borderRadius:4, cursor:'pointer', fontSize:11, fontWeight:600, color:'#374151'}}>⬇️ Sauvegarder</button>
+                            <label style={{flex:1, padding:'8px', background:'#f3f4f6', border:'1px solid #d1d5db', borderRadius:4, cursor:'pointer', fontSize:11, fontWeight:600, color:'#374151', textAlign:'center'}}>⬆️ Charger<input type="file" accept=".json" onChange={handleImportConfig} style={{display:'none'}} /></label>
                         </div>
-                    ))}
+                    </div>
+                    
+                    <div style={sidebarSectionStyle}>
+                        <h3 style={sidebarTitleStyle}>📗 SOURCE CSV (LECTURE)</h3>
+                        <div style={{marginBottom:10}}><label style={labelStyle}>URL Google Sheet (Public)</label><input type="text" value={sheetUrl} onChange={e=>setSheetUrl(e.target.value)} style={inputStyle}/></div>
+                        <button onClick={handleImport} style={secondaryButtonStyle}>📥 Importer Désidérata</button>
+                    </div>
+
+                    <div style={sidebarSectionStyle}>
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10}}>
+                            <h3 style={{...sidebarTitleStyle, color:'#2563eb', marginBottom:0}}>🏢 AGENTS BUREAU</h3>
+                            <button onClick={handleAddBureau} style={{fontSize:11, padding:'4px 8px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:4, cursor:'pointer', fontWeight:'bold'}}>+ Ajouter</button>
+                        </div>
+                        <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
+                            {(config.CONTROLLERS_AFFECTES_BUREAU || []).map((agent: string) => (
+                                <div key={agent} style={{display:'flex', alignItems:'center', gap:4, background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:4, padding:'2px 6px', fontSize:11, color:'#1e40af', fontWeight:600}}>{agent}<span onClick={() => handleRemoveBureau(agent)} style={{cursor:'pointer', color:'#ef4444', fontWeight:'bold', marginLeft:2}}>×</span></div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div style={sidebarSectionStyle}>
+                        <h3 style={{...sidebarTitleStyle, color:'#3b82f6'}}>⚙️ PARAMÈTRES GÉNÉRAUX</h3>
+                        <div style={rowStyle}><label style={labelStyle}>Année</label><input type="number" value={year} onChange={e=>handleYearChange(e.target.value)} style={numberInputStyle}/></div>
+                        <div style={rowStyle}><label style={labelStyle}>Jour Début</label><input type="number" value={startDay} onChange={e=>setStartDay(Number(e.target.value))} style={numberInputStyle}/></div>
+                        <div style={rowStyle}><label style={labelStyle}>Jour Fin</label><input type="number" value={endDay} onChange={e=>setEndDay(Number(e.target.value))} style={numberInputStyle}/></div>
+                        <div style={{height:1, background:'#f1f5f9', margin:'10px 0'}}></div>
+                        <div style={rowStyle}><label style={labelStyle}>Temps Limite (sec)</label><input type="number" value={config.CONTRAT.SOLVER_TIME_LIMIT || 25} onChange={e=>handleContratChange('SOLVER_TIME_LIMIT', e.target.value)} style={{...numberInputStyle, color:'#3b82f6', fontWeight:'bold'}} /></div>
+                        <div style={rowStyle}><label style={labelStyle}>Max Heures (7j glissants)</label><input type="number" value={config.CONTRAT.MAX_HOURS_7_ROLLING} onChange={e=>handleContratChange('MAX_HOURS_7_ROLLING', e.target.value)} style={numberInputStyle} /></div>
+                        <div style={rowStyle}><label style={labelStyle}>Max Heures (Sem. Civile)</label><input type="number" value={config.CONTRAT.MAX_HOURS_WEEK_CALENDAR} onChange={e=>handleContratChange('MAX_HOURS_WEEK_CALENDAR', e.target.value)} style={numberInputStyle} /></div>
+                        <div style={rowStyle}><label style={labelStyle}>Repos Min (h)</label><input type="number" value={config.CONTRAT.MIN_REST_HOURS} onChange={e=>handleContratChange('MIN_REST_HOURS', e.target.value)} style={numberInputStyle} /></div>
+                        <div style={rowStyle}><label style={labelStyle}>Max Jours Consécutifs</label><input type="number" value={config.CONTRAT.MAX_CONSECUTIVE_SHIFTS} onChange={e=>handleContratChange('MAX_CONSECUTIVE_SHIFTS', e.target.value)} style={numberInputStyle} /></div>
+                    </div>
+
+                    <div style={sidebarSectionStyle}>
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10}}>
+                            <h3 style={{...sidebarTitleStyle, color:'#10b981', marginBottom:0}}>🕒 VACATIONS (HH:MM)</h3>
+                            <button onClick={handleAddVacation} style={{fontSize:11, padding:'4px 8px', background:'#ecfdf5', color:'#10b981', border:'1px solid #a7f3d0', borderRadius:4, cursor:'pointer', fontWeight:'bold'}}>+ Ajouter</button>
+                        </div>
+                        {Object.entries(config.VACATIONS).map(([code, horaire]: any) => (
+                            <div key={code} style={{display:'flex', alignItems:'center', gap:5, marginBottom:8, background:'#f8fafc', padding:6, borderRadius:6, border:'1px solid #f1f5f9'}}>
+                                <span style={{fontWeight:'bold', fontSize:12, minWidth:35, textAlign:'center', background:'white', border:'1px solid #e2e8f0', borderRadius:4, padding:'4px 0', color:'#334155'}}>{code}</span>
+                                <TimeInput val={horaire.debut} onSave={(v) => handleChangeVacation(code, 'debut', v)} />
+                                <span style={{color:'#94a3b8', fontSize:10}}>➜</span>
+                                <TimeInput val={horaire.fin} onSave={(v) => handleChangeVacation(code, 'fin', v)} />
+                                <span onClick={() => handleDeleteVacation(code)} style={{cursor:'pointer', marginLeft:'auto', fontSize:16, color:'#ef4444', fontWeight:'bold', padding:'0 4px'}} title="Supprimer">×</span>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>
     </div>
   );
 }
+
+// Styles inchangés...
+const sidebarSectionStyle: React.CSSProperties = { padding: 20, borderBottom: '1px solid #f1f5f9' };
+const sidebarTitleStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#64748b', letterSpacing: 0.5, marginBottom: 12, marginTop: 0, textTransform: 'uppercase' };
+const labelStyle: React.CSSProperties = { fontSize: 12, color: '#475569', fontWeight: 500 };
+const inputStyle: React.CSSProperties = { width: '100%', padding: '8px', fontSize: 12, border: '1px solid #cbd5e1', borderRadius: 4, marginTop: 4, boxSizing: 'border-box' };
+const secondaryButtonStyle: React.CSSProperties = { width: '100%', background: '#22c55e', color: 'white', border: 'none', padding: '8px', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', marginTop: 10 };
+const rowStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 };
+const numberInputStyle: React.CSSProperties = { width: 50, padding: '4px 8px', textAlign: 'right', fontSize: 12, border: '1px solid #cbd5e1', borderRadius: 4, fontWeight: 600, color: '#334155' };
 
 export default App;
