@@ -8,10 +8,18 @@ import "ag-grid-community/styles/ag-theme-balham.css";
 
 ModuleRegistry.registerModules([ AllCommunityModule ]);
 
+// --- HELPER DE SÉCURITÉ ---
+// Remplace .toString() pour éviter les crashs sur undefined
+const safeString = (val: any): string => {
+    if (val === null || val === undefined) return '';
+    return String(val);
+};
+
 // --- 1. HEADER PERSONNALISÉ ---
 const CustomHeader = (props: any) => {
     const { displayName, dayNum, fullDate, api, config, context } = props;
-    const { optionalCoverage, onToggleOptionalCoverage, isDesiderataView } = context;
+    // Sécurisation context
+    const { optionalCoverage, onToggleOptionalCoverage, isDesiderataView } = context || {};
 
     const targetShifts = config && config.VACATIONS 
         ? Object.keys(config.VACATIONS) 
@@ -22,7 +30,7 @@ const CustomHeader = (props: any) => {
     if (api) {
         api.forEachNode((node: any) => {
             const val = node.data ? node.data[dayNum] : null;
-            if (val && val !== 'OFF' && val !== 'C' && val !== '' && val !== 'O') {
+            if (val && !['OFF','C','','O'].includes(val)) {
                 presentShifts.add(val);
             }
         });
@@ -40,7 +48,7 @@ const CustomHeader = (props: any) => {
     return (
         <div style={{display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', paddingTop: 6, boxSizing:'border-box'}}>
             <div style={{fontSize: 10, fontWeight: '700', color: '#64748b', textTransform:'uppercase', lineHeight:'1.2'}}>
-                {displayName.substring(0, 2)}
+                {displayName ? displayName.substring(0, 2) : ''}
             </div>
             <div style={{fontSize: 13, fontWeight: '800', color: '#1e293b', lineHeight:'1.4'}}>
                 {dayNum}
@@ -50,8 +58,11 @@ const CustomHeader = (props: any) => {
             </div>
             <div style={{display:'flex', flexDirection:'column', gap: 1, marginTop: 'auto', paddingBottom: 6}}>
                 {missingShifts.map((code: string, idx: number) => {
-                    const isOptional = optionalCoverage && optionalCoverage[dayNum.toString()]?.includes(code);
+                    const dayStr = safeString(dayNum);
+                    // Sécurisation de l'accès à optionalCoverage
+                    const isOptional = optionalCoverage && optionalCoverage[dayStr] && optionalCoverage[dayStr].includes(code);
                     const color = isOptional ? '#2563eb' : '#ef4444';
+                    
                     return (
                         <span 
                             key={idx} 
@@ -81,12 +92,11 @@ const CustomHeader = (props: any) => {
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
     const rowData = props.data;
-    const { daysList, config, preAssignments } = props.context; 
+    const { daysList, config, preAssignments } = props.context || {}; 
 
-    // Sécurisation : String() au lieu de .toString()
+    // Helper de normalisation sécurisé
     const normalize = (v: any) => {
-        if (v === null || v === undefined) return '';
-        const s = String(v).trim().toUpperCase();
+        const s = safeString(v).trim().toUpperCase();
         if (s === 'O' || s === 'OFF' || s === '0') return 'OFF';
         return s;
     };
@@ -97,7 +107,7 @@ const AgentCellRenderer = (props: any) => {
 
     if (daysList && rowData && config) {
         daysList.forEach((dayNum: number) => {
-            const dayStr = String(dayNum); // Sécurisé
+            const dayStr = safeString(dayNum);
             const actualCode = normalize(rowData[dayStr]);
 
             if (actualCode && actualCode !== '' && actualCode !== 'OFF') {
@@ -113,8 +123,8 @@ const AgentCellRenderer = (props: any) => {
             if (preAssignments && preAssignments[agentName]) {
                 const rawRequest = preAssignments[agentName][dayStr];
                 if (rawRequest) {
-                    // FIX CRASH : Utilisation de String() pour éviter le crash sur undefined
-                    const allowed = String(rawRequest)
+                    // Sécurisation du parsing avec String()
+                    const allowed = safeString(rawRequest)
                         .split(/[,/ ]+/)
                         .map((s: string) => normalize(s))
                         .filter((s: string) => s !== '');
@@ -131,7 +141,7 @@ const AgentCellRenderer = (props: any) => {
     const target = Math.ceil((totalDays - leaves) / 2);
     const statsColor = worked >= (target - 1) ? '#16a34a' : '#ea580c';
 
-    const isBureau = (config.CONTROLLERS_AFFECTES_BUREAU || []).includes(agentName);
+    const isBureau = (config?.CONTROLLERS_AFFECTES_BUREAU || []).includes(agentName);
     const nameStyle = {
         fontWeight: '800', fontSize: 13, 
         color: isBureau ? '#2563eb' : '#334155'
@@ -166,28 +176,29 @@ const AgentCellRenderer = (props: any) => {
 // --- 3. COMPOSANT CELLULE SHIFT ---
 const ShiftCellRenderer = (props: any) => {
     const rawVal = props.value;
-    const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView, hideOff } = props.context;
+    const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView, hideOff } = props.context || {};
     const agentName = props.data.Agent;
     const dayNum = props.colDef.headerComponentParams.dayNum;
 
     const normalize = (v: any) => {
-        if (v === null || v === undefined) return '';
-        const s = String(v).trim().toUpperCase();
+        const s = safeString(v).trim().toUpperCase();
         if (s === 'O' || s === 'OFF' || s === '0') return 'OFF';
         return s;
     };
 
     const displayVal = normalize(rawVal);
     
-    if (!displayVal || displayVal === '') return null;
+    // Affichage conditionnel
+    if (displayVal === '') return null;
     if (hideOff && displayVal === 'OFF' && !isDesiderataView) return null;
 
-    const rawRequest = preAssignments && preAssignments[agentName] ? preAssignments[agentName][dayNum] : '';
+    const dayStr = safeString(dayNum);
+    const rawRequest = preAssignments && preAssignments[agentName] ? preAssignments[agentName][dayStr] : '';
     
     let allowedCodes: string[] = [];
     if (rawRequest) {
-        // FIX CRASH : Utilisation de String() ici aussi
-        allowedCodes = String(rawRequest)
+        // Sécurisation parsing
+        allowedCodes = safeString(rawRequest)
             .split(/[,/ ]+/)
             .map((s: string) => normalize(s))
             .filter((s: string) => s !== '');
@@ -195,6 +206,7 @@ const ShiftCellRenderer = (props: any) => {
 
     const hasRequest = allowedCodes.length > 0;
     const isMatch = hasRequest && allowedCodes.includes(displayVal);
+    
     const cellKey = `${agentName}_${dayNum}`;
     const isSoft = softConstraints && softConstraints.has(cellKey);
 
@@ -351,7 +363,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
     }];
 
     daysList.forEach(dayNum => {
-      const dayStr = dayNum.toString();
+      const dayStr = safeString(dayNum); // Sécurisation
       let currentYear = year;
       if (startDay > endDay && dayNum >= startDay) currentYear = year - 1; 
       
@@ -408,8 +420,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
         rowData={data || []} 
         columnDefs={columnDefs} 
         components={components} 
-        // CORRECTION IMPORTANTE : theme="legacy" pour éviter l'erreur #239
-        theme="legacy"
+        theme="legacy" // Evite erreur #239
         context={{ daysList, config, preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView, hideOff, optionalCoverage, onToggleOptionalCoverage }}
         defaultColDef={{ 
             resizable: true, 
