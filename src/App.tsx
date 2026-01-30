@@ -148,9 +148,43 @@ function App() {
       updateConfig({ ...config, VACATIONS: newVacations });
   };
 
+  // --- SAUVEGARDE / CHARGEMENT (FICHIER JSON) ---
+  const handleExportConfig = () => {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
+      const downloadAnchorNode = document.createElement('a');
+      downloadAnchorNode.setAttribute("href", dataStr);
+      downloadAnchorNode.setAttribute("download", `tds_config_${year}.json`);
+      document.body.appendChild(downloadAnchorNode); 
+      downloadAnchorNode.click();
+      downloadAnchorNode.remove();
+  };
+
+  const handleImportConfig = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const fileReader = new FileReader();
+      if (event.target.files && event.target.files[0]) {
+          fileReader.readAsText(event.target.files[0], "UTF-8");
+          fileReader.onload = (e) => {
+              try {
+                  if (e.target?.result) {
+                      const importedConfig = JSON.parse(e.target.result as string);
+                      if (importedConfig.VACATIONS && importedConfig.CONTRAT) {
+                          setConfig(importedConfig);
+                          if (importedConfig.ANNEE) setYear(importedConfig.ANNEE);
+                          localStorage.setItem('tds_config', JSON.stringify(importedConfig));
+                          alert("Configuration chargée avec succès !");
+                      } else {
+                          alert("Erreur : Fichier invalide.");
+                      }
+                  }
+              } catch (err) {
+                  alert("Erreur de lecture du fichier.");
+              }
+          };
+      }
+  };
+
   // --- GESTION DES CERCLES VIOLETS (SOFT) ---
   
-  // 1. Bascule individuelle (Clic Droit)
   const handleToggleSoft = (agent: string, dayNum: number) => {
       const key = `${agent}_${dayNum}`;
       const newSet = new Set(softConstraints);
@@ -159,15 +193,12 @@ function App() {
       setSoftConstraints(newSet);
   };
 
-  // 2. Bascule GLOBALE (Bouton Tout Soft)
   const handleToggleAllSoft = () => {
       const allKeys = new Set<string>();
       let requestCount = 0;
 
-      // On scanne tous les désidérata connus
       Object.entries(preAssignments).forEach(([agent, days]: [string, any]) => {
           Object.keys(days).forEach(day => {
-              // Si la case n'est pas vide, c'est une demande
               if (days[day] && days[day] !== "") {
                   allKeys.add(`${agent}_${day}`);
                   requestCount++;
@@ -176,15 +207,14 @@ function App() {
       });
 
       if (requestCount === 0) {
-          alert("Aucun désidérata à cercler ! Importez d'abord les données.");
+          alert("Aucun désidérata à cercler !");
           return;
       }
 
-      // Si tout est déjà coché -> on décoche tout. Sinon on coche tout.
       if (softConstraints.size === allKeys.size) {
-          setSoftConstraints(new Set()); // Reset
+          setSoftConstraints(new Set()); 
       } else {
-          setSoftConstraints(allKeys); // Tout sélectionner
+          setSoftConstraints(allKeys); 
       }
   };
 
@@ -194,7 +224,7 @@ function App() {
     try {
         const data = await parseGoogleSheet(sheetUrl, startDay, endDay); 
         setPreAssignments(data);
-        setSoftConstraints(new Set()); // Reset des contraintes violettes au nouvel import
+        setSoftConstraints(new Set()); 
         setStatus({type:'success', msg: `✅ Import OK (${Object.keys(data).length} agents)`});
         setActiveTab('desiderata');
     } catch (e: any) {
@@ -212,7 +242,6 @@ function App() {
         end_day: Number(endDay),
         config: { ...config, ANNEE: Number(year) },
         pre_assignments: preAssignments,
-        // Envoi des contraintes violettes
         soft_assignments: Array.from(softConstraints) 
       };
       const response = await axios.post(API_URL, payload);
@@ -379,11 +408,11 @@ function App() {
                             isDesiderataView={activeTab === 'desiderata'}
                             preAssignments={preAssignments}
                             showDesiderataMatch={activeTab === 'planning' ? showDesiderataMatch : false}
-                            // Props pour le mode Violet
+                            // Props pour le mode Violet et affichage
                             softConstraints={softConstraints}
                             onToggleSoft={handleToggleSoft}
                             zoomLevel={zoomLevel}
-                            hideOff={hideOff} // NOUVEAU
+                            hideOff={hideOff} 
                         />
                    )}
                    {activeTab === 'bilan' && <Bilan planning={planning} config={config} year={year} startDay={startDay} endDay={endDay} />}
@@ -398,6 +427,24 @@ function App() {
                     overflowY: 'auto', flexShrink: 0
                 }}>
                     
+                    {/* --- SAUVEGARDE CONFIG --- */}
+                    <div style={sidebarSectionStyle}>
+                        <h3 style={{...sidebarTitleStyle, color:'#8b5cf6'}}>💾 SAUVEGARDE CONFIG</h3>
+                        <div style={{display:'flex', gap:10}}>
+                            <button 
+                                onClick={handleExportConfig} 
+                                style={{flex:1, padding:'8px', background:'#f3f4f6', border:'1px solid #d1d5db', borderRadius:4, cursor:'pointer', fontSize:11, fontWeight:600, color:'#374151'}}
+                            >
+                                ⬇️ Sauvegarder
+                            </button>
+                            
+                            <label style={{flex:1, padding:'8px', background:'#f3f4f6', border:'1px solid #d1d5db', borderRadius:4, cursor:'pointer', fontSize:11, fontWeight:600, color:'#374151', textAlign:'center'}}>
+                                ⬆️ Charger
+                                <input type="file" accept=".json" onChange={handleImportConfig} style={{display:'none'}} />
+                            </label>
+                        </div>
+                    </div>
+
                     <div style={sidebarSectionStyle}>
                         <h3 style={sidebarTitleStyle}>📗 SOURCE CSV (LECTURE)</h3>
                         <div style={{marginBottom:10}}><label style={labelStyle}>URL Google Sheet (Public)</label><input type="text" value={sheetUrl} onChange={e=>setSheetUrl(e.target.value)} style={inputStyle}/></div>
