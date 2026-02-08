@@ -1,17 +1,17 @@
 export interface AppConfig {
   ANNEE: number;
   CONTROLEURS: string[];
-  CONTROLLERS_AFFECTES_BUREAU?: string[]; // "?" car peut être vide au début
+  CONTROLLERS_AFFECTES_BUREAU?: string[];
+  CONTROLLERS_PARITE_STRICTE?: string[]; // <--- NOUVEAU
   VACATIONS: {
     [code: string]: {
       debut: number;
       fin: number;
     };
   };
-  // AJOUTER CE BLOC :
   CYCLES?: {
     [agentName: string]: {
-      OR: string[][];     // Tableau de paires de strings (ex: [["M", "S"]])
+      OR: string[][];
       ARGENT: string[][];
     };
   };

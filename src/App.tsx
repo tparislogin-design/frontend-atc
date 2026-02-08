@@ -13,11 +13,11 @@ import { decimalToTime, timeToDecimal } from './utils/timeConverters';
 // Import de TYPE
 import type { AppConfig } from './utils/types';
 
+const API_URL = "https://ttttty-ty.hf.space/api/optimize"; 
+
 // ==========================================
 // 1. STYLES & CONSTANTES (Définis en PREMIER)
 // ==========================================
-
-const API_URL = "https://ttttty-ty.hf.space/api/optimize"; 
 
 const sidebarSectionStyle: React.CSSProperties = { padding: 20, borderBottom: '1px solid #f1f5f9' };
 const sidebarTitleStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#64748b', letterSpacing: 0.5, marginBottom: 12, marginTop: 0, textTransform: 'uppercase' };
@@ -35,6 +35,7 @@ const DEFAULT_CONFIG: AppConfig = {
   ANNEE: 2026,
   CONTROLEURS: ["GAO", "WBR", "PLC", "CML", "BBD", "LAK", "MZN", "TRT", "CLO", "LNN", "KGR", "FRD", "DAZ", "GNC", "DTY", "JCT"],
   CONTROLLERS_AFFECTES_BUREAU: [],
+  CONTROLLERS_PARITE_STRICTE: [], // Initialisation vide
   VACATIONS: { 
     "M":  { debut: 5.5, fin: 12.75 },
     "J1": { debut: 7.5, fin: 15.5 },
@@ -169,7 +170,20 @@ function App() {
       updateConfig({ ...config, CYCLES: { ...currentCycles, [selectedAgentConfig]: newAgentCycles } });
   };
 
-  // --- AUTRES HANDLERS ---
+  // --- NOUVEAU : HANDLER PARITÉ ---
+  const handleToggleParity = () => {
+      if (!selectedAgentConfig) return;
+      const currentList = config.CONTROLLERS_PARITE_STRICTE || [];
+      let newList;
+      if (currentList.includes(selectedAgentConfig)) {
+          newList = currentList.filter(a => a !== selectedAgentConfig);
+      } else {
+          newList = [...currentList, selectedAgentConfig];
+      }
+      updateConfig({ ...config, CONTROLLERS_PARITE_STRICTE: newList });
+  };
+
+  // --- AUTRES HANDLERS (Export/Import/Misc) ---
   const handleExportConfig = () => {
       const data = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
       const a = document.createElement('a'); a.href = data; a.download = `tds_config_${year}.json`; a.click();
@@ -237,6 +251,7 @@ function App() {
       setOptionalCoverage(newCoverage);
   };
 
+  // --- API HANDLERS (AVEC HANDLE IMPORT RESTAURÉ) ---
   const handleImport = async () => {
     setStatus({type:'loading', msg:'📡 Lecture...'});
     try {
@@ -271,6 +286,7 @@ function App() {
   const renderConfigTab = () => {
       const shifts = Object.keys(config.VACATIONS);
       const agentCycles = (config.CYCLES || {})[selectedAgentConfig] || { OR: [], ARGENT: [] };
+      const isParityEnabled = (config.CONTROLLERS_PARITE_STRICTE || []).includes(selectedAgentConfig);
 
       return (
           <div style={{display:'flex', height:'100%'}}>
@@ -300,32 +316,36 @@ function App() {
                       <div style={{color:'#94a3b8', textAlign:'center', marginTop:50}}>Sélectionnez un agent à gauche pour configurer ses habitudes.</div>
                   ) : (
                       <div>
-                          <h2 style={{marginTop:0, color:'#1e293b'}}>Cycles & Habitudes : <span style={{color:'#2563eb'}}>{selectedAgentConfig}</span></h2>
-                          <p style={{fontSize:13, color:'#64748b', marginBottom:30}}>Définissez les enchaînements préférés de cet agent. Le solveur essaiera de les respecter en priorité (Bonus).</p>
+                          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:30}}>
+                              <div>
+                                  <h2 style={{margin:0, color:'#1e293b'}}>Cycles & Habitudes : <span style={{color:'#2563eb'}}>{selectedAgentConfig}</span></h2>
+                                  <p style={{fontSize:13, color:'#64748b', margin:0}}>Définissez les enchaînements préférés.</p>
+                              </div>
+                              
+                              {/* BOUTON TOGGLE PARITÉ */}
+                              <label style={{display:'flex', alignItems:'center', gap:8, cursor:'pointer', background: isParityEnabled ? '#dcfce7' : '#f1f5f9', padding:'8px 12px', borderRadius:6, border: isParityEnabled ? '1px solid #16a34a' : '1px solid #cbd5e1'}}>
+                                  <input type="checkbox" checked={isParityEnabled} onChange={handleToggleParity} style={{cursor:'pointer'}} />
+                                  <span style={{fontWeight:'bold', fontSize:13, color: isParityEnabled ? '#15803d' : '#475569'}}>
+                                      Parité Stricte (Nb jours Pair)
+                                  </span>
+                              </label>
+                          </div>
 
                           {/* SECTION OR */}
                           <div style={{marginBottom:30, background:'#fffbeb', border:'1px solid #fcd34d', borderRadius:8, padding:20}}>
                               <h3 style={{marginTop:0, color:'#b45309', fontSize:14}}>🥇 Séquences OR (Priorité Haute)</h3>
                               <div style={{display:'flex', gap:10, marginBottom:15, alignItems:'center'}}>
-                                  <select style={selectStyle} value={newCycleOr1} onChange={e=>setNewCycleOr1(e.target.value)}>
-                                      <option value="">J</option>
-                                      {shifts.map(s=><option key={s} value={s}>{s}</option>)}
-                                  </select>
+                                  <select style={selectStyle} value={newCycleOr1} onChange={e=>setNewCycleOr1(e.target.value)}><option value="">J</option>{shifts.map(s=><option key={s} value={s}>{s}</option>)}</select>
                                   <span>➜</span>
-                                  <select style={selectStyle} value={newCycleOr2} onChange={e=>setNewCycleOr2(e.target.value)}>
-                                      <option value="">J+1</option>
-                                      {shifts.map(s=><option key={s} value={s}>{s}</option>)}
-                                  </select>
+                                  <select style={selectStyle} value={newCycleOr2} onChange={e=>setNewCycleOr2(e.target.value)}><option value="">J+1</option>{shifts.map(s=><option key={s} value={s}>{s}</option>)}</select>
                                   <button onClick={()=>handleAddCycle('OR')} style={addButtonStyle('#b45309', '#fffbeb', '#fcd34d')}>+ Ajouter</button>
                               </div>
                               <div style={{display:'flex', flexWrap:'wrap', gap:10}}>
                                   {agentCycles.OR?.map((pair: string[], idx: number) => (
                                       <div key={idx} style={tagStyle('#b45309', '#fff7ed', '#fed7aa')}>
-                                          {pair[0]} ➜ {pair[1]} 
-                                          <span onClick={()=>handleDeleteCycle('OR', idx)} style={{cursor:'pointer', marginLeft:8, fontWeight:'bold'}}>×</span>
+                                          {pair[0]} ➜ {pair[1]} <span onClick={()=>handleDeleteCycle('OR', idx)} style={{cursor:'pointer', marginLeft:8, fontWeight:'bold'}}>×</span>
                                       </div>
                                   ))}
-                                  {(!agentCycles.OR || agentCycles.OR.length===0) && <span style={{fontSize:12, color:'#d97706', fontStyle:'italic'}}>Aucune séquence définie.</span>}
                               </div>
                           </div>
 
@@ -333,28 +353,19 @@ function App() {
                           <div style={{background:'#f8fafc', border:'1px solid #cbd5e1', borderRadius:8, padding:20}}>
                               <h3 style={{marginTop:0, color:'#475569', fontSize:14}}>🥈 Séquences ARGENT (Priorité Moyenne)</h3>
                               <div style={{display:'flex', gap:10, marginBottom:15, alignItems:'center'}}>
-                                  <select style={selectStyle} value={newCycleAg1} onChange={e=>setNewCycleAg1(e.target.value)}>
-                                      <option value="">J</option>
-                                      {shifts.map(s=><option key={s} value={s}>{s}</option>)}
-                                  </select>
+                                  <select style={selectStyle} value={newCycleAg1} onChange={e=>setNewCycleAg1(e.target.value)}><option value="">J</option>{shifts.map(s=><option key={s} value={s}>{s}</option>)}</select>
                                   <span>➜</span>
-                                  <select style={selectStyle} value={newCycleAg2} onChange={e=>setNewCycleAg2(e.target.value)}>
-                                      <option value="">J+1</option>
-                                      {shifts.map(s=><option key={s} value={s}>{s}</option>)}
-                                  </select>
+                                  <select style={selectStyle} value={newCycleAg2} onChange={e=>setNewCycleAg2(e.target.value)}><option value="">J+1</option>{shifts.map(s=><option key={s} value={s}>{s}</option>)}</select>
                                   <button onClick={()=>handleAddCycle('ARGENT')} style={addButtonStyle('#475569', '#f1f5f9', '#cbd5e1')}>+ Ajouter</button>
                               </div>
                               <div style={{display:'flex', flexWrap:'wrap', gap:10}}>
                                   {agentCycles.ARGENT?.map((pair: string[], idx: number) => (
                                       <div key={idx} style={tagStyle('#475569', '#f8fafc', '#e2e8f0')}>
-                                          {pair[0]} ➜ {pair[1]} 
-                                          <span onClick={()=>handleDeleteCycle('ARGENT', idx)} style={{cursor:'pointer', marginLeft:8, fontWeight:'bold'}}>×</span>
+                                          {pair[0]} ➜ {pair[1]} <span onClick={()=>handleDeleteCycle('ARGENT', idx)} style={{cursor:'pointer', marginLeft:8, fontWeight:'bold'}}>×</span>
                                       </div>
                                   ))}
-                                  {(!agentCycles.ARGENT || agentCycles.ARGENT.length===0) && <span style={{fontSize:12, color:'#94a3b8', fontStyle:'italic'}}>Aucune séquence définie.</span>}
                               </div>
                           </div>
-
                       </div>
                   )}
               </div>
