@@ -131,14 +131,13 @@ const AgentCellRenderer = (props: any) => {
     );
 };
 
-// --- 4. SHIFT CELL (CORRIGÉ POUR OFF) ---
+// --- 4. SHIFT CELL (CORRIGÉ : OFF blanc sur blanc) ---
 const ShiftCellRenderer = (props: any) => {
     const rawVal = props.value;
     const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView, hideOff } = props.context || {};
     const agentName = props.data.Agent;
     const dayNum = props.colDef.headerComponentParams.dayNum;
 
-    // Normalisation
     const normalize = (v: any) => {
         const s = safeString(v).trim().toUpperCase();
         if (s === 'O' || s === 'OFF' || s === '0') return 'OFF';
@@ -149,14 +148,6 @@ const ShiftCellRenderer = (props: any) => {
     
     // Si vide, on n'affiche rien
     if (displayVal === '') return null;
-
-    // --- LOGIQUE TEXTE OFF ---
-    let textToDisplay = displayVal;
-    
-    // Si c'est OFF, qu'on est pas en Désidérata, et que hideOff est actif -> Texte vide
-    if (displayVal === 'OFF' && !isDesiderataView && hideOff) {
-        textToDisplay = ''; 
-    }
 
     // Analyse de la demande pour les bordures
     const dayStr = safeString(dayNum);
@@ -172,17 +163,13 @@ const ShiftCellRenderer = (props: any) => {
     const cellKey = `${agentName}_${dayNum}`;
     const isSoft = softConstraints && softConstraints.has(cellKey);
 
-    // --- BORDURES ---
+    // BORDURES
     const getBorderStyle = () => {
         if (isDesiderataView) return isSoft ? '2px solid #9333ea' : '1px solid #cbd5e1';
         if (showDesiderataMatch && hasRequest) {
             if (isMatch) return '2px solid #16a34a'; // Vert
             return '2px solid #ef4444'; // Rouge
         }
-        // Par défaut: on prend la bordure définie dans le style (qui sera transparent pour OFF)
-        // Mais pour garder la grille propre, on peut vouloir '1px solid #e2e8f0' très léger
-        // ou '1px solid transparent' pour le OFF. 
-        // Ici on utilise la bordure du style défini plus bas.
         return `1px solid ${style.border}`;
     };
 
@@ -201,12 +188,22 @@ const ShiftCellRenderer = (props: any) => {
         case 'C': style = { color: '#db2777', bg: '#fce7f3', border: '#fbcfe8' }; break;
         
         case 'OFF': 
-            // MODIFICATION DEMANDÉE : Fond Blanc, Texte Noir, Bordure transparente/blanche
-            style = { 
-                color: '#000000', 
-                bg: '#ffffff', 
-                border: 'transparent' // Pas de cadre gris
-            }; 
+            // LOGIQUE INVISIBLE MAIS PRÉSENT
+            if (!isDesiderataView && hideOff) {
+                // Masqué : Blanc sur Blanc (Invisible à l'oeil, présent dans le DOM)
+                style = { 
+                    color: '#ffffff', 
+                    bg: '#ffffff', 
+                    border: 'transparent' 
+                };
+            } else {
+                // Visible : Noir sur Blanc
+                style = { 
+                    color: '#000000', 
+                    bg: '#ffffff', 
+                    border: 'transparent' // Pas de cadre gris
+                }; 
+            }
             break;
 
         case 'FSAU':
@@ -255,115 +252,10 @@ const ShiftCellRenderer = (props: any) => {
                 fontWeight: '700',
                 width: '34px',
                 textAlign: 'center', 
+                // Ombre uniquement si couleur significative (pas sur OFF standard)
                 boxShadow: isRed 
                     ? '0 0 4px rgba(239, 68, 68, 0.5)' 
                     : (isGreen 
                         ? '0 0 4px rgba(22, 163, 74, 0.5)'
-                        : (isPurple ? '0 0 4px rgba(147, 51, 234, 0.5)' : 'none')), // Pas d'ombre par défaut sur OFF
+                        : (isPurple ? '0 0 4px rgba(147, 51, 234, 0.5)' : 'none')),
                 display: 'inline-block',
-                transform: (isRed || isGreen || isPurple) ? 'scale(1.05)' : 'scale(1)',
-                transition: 'all 0.1s'
-            }}>
-                {textToDisplay}
-            </span>
-        </div>
-    );
-};
-
-// --- 5. MAIN ---
-interface PlanningTableProps {
-  data: any[];
-  year: number;
-  startDay: number;
-  endDay: number;
-  config: any;
-  isDesiderataView?: boolean;
-  preAssignments?: any;
-  showDesiderataMatch?: boolean;
-  zoomLevel?: number;
-  softConstraints?: Set<string>;
-  onToggleSoft?: (agent: string, day: number) => void;
-  hideOff?: boolean;
-  optionalCoverage?: Record<string, string[]>;
-  onToggleOptionalCoverage?: (day: number, shift: string) => void;
-  onToggleGlobalOptional?: (shift: string) => void;
-}
-
-const PlanningTable: React.FC<PlanningTableProps> = ({ 
-  data, year, startDay, endDay, config, 
-  isDesiderataView = false,
-  preAssignments = {}, 
-  showDesiderataMatch = false,
-  zoomLevel = 100,
-  softConstraints,
-  onToggleSoft,
-  hideOff = false,
-  optionalCoverage,
-  onToggleOptionalCoverage,
-  onToggleGlobalOptional
-}) => {
-
-  const components = useMemo(() => ({
-      agColumnHeader: CustomHeader,
-      agColumnHeaderGlobal: GlobalHeader,
-      agentCellRenderer: AgentCellRenderer,
-      shiftCellRenderer: ShiftCellRenderer
-  }), []);
-
-  const daysList = useMemo(() => {
-    const list = [];
-    if (startDay <= endDay) { for (let i = startDay; i <= endDay; i++) list.push(i); } 
-    else { for (let i = startDay; i <= 365; i++) list.push(i); for (let i = 1; i <= endDay; i++) list.push(i); }
-    return list;
-  }, [startDay, endDay]);
-
-  const columnDefs = useMemo<ColDef[]>(() => {
-    const cols: ColDef[] = [{ field: 'Agent', headerName: 'CONTRÔLEUR', pinned: 'left', width: 140, cellRenderer: 'agentCellRenderer', cellStyle: { backgroundColor: '#f8fafc', borderRight: '2px solid #cbd5e1', display:'flex', alignItems:'center', padding:0 } }];
-    
-    if (isDesiderataView) {
-        cols.push({
-            field: 'Global', headerName: 'GLOBAL', pinned: 'left', width: 50,
-            headerComponent: 'agColumnHeaderGlobal',
-            headerComponentParams: { config: config, context: { optionalCoverage, onToggleGlobalOptional, daysList } },
-            cellStyle: { background: '#f8fafc', borderRight: '1px solid #cbd5e1' },
-            cellRenderer: () => null
-        });
-    }
-
-    daysList.forEach(dayNum => {
-      const dayStr = safeString(dayNum);
-      let currentYear = year;
-      if (startDay > endDay && dayNum >= startDay) currentYear = year - 1; 
-      const date = new Date(currentYear, 0, dayNum); 
-      const dateStr = date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-      const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-
-      cols.push({
-        field: dayStr, width: 52, headerClass: isWeekend ? 'weekend-header' : '',
-        headerComponentParams: { displayName: date.toLocaleDateString('fr-FR', { weekday: 'short' }), dayNum: dayNum, fullDate: dateStr, config: config, context: { optionalCoverage, onToggleOptionalCoverage, isDesiderataView } },
-        cellRenderer: 'shiftCellRenderer',
-        cellStyle: { display: 'flex', justifyContent: 'center', alignItems: 'center', borderRight: '1px solid #cbd5e1', padding: 0, backgroundColor: isWeekend ? '#e5e7eb' : 'white' },
-        editable: false 
-      });
-    });
-    return cols; 
-  }, [year, startDay, endDay, isDesiderataView, daysList, config, optionalCoverage]);
-
-  return (
-    <div className="ag-theme-balham" style={{ height: '100%', width: '100%', zoom: `${zoomLevel}%` }}>
-      <style>{`.ag-theme-balham .ag-header-cell { padding: 0 !important; } .ag-theme-balham .ag-header-cell-label { width: 100%; height: 100%; padding: 0; } .ag-theme-balham .ag-root-wrapper { border: 1px solid #94a3b8; } .ag-theme-balham .ag-header { border-bottom: 2px solid #cbd5e1; background-color: white; } .ag-theme-balham .ag-row { border-bottom-color: #cbd5e1; } .ag-theme-balham .ag-pinned-left-header { border-right: 2px solid #cbd5e1; } .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; } .ag-theme-balham .weekend-header { background-color: #e5e7eb !important; border-bottom: 1px solid #cbd5e1; }`}</style>
-      <AgGridReact 
-        rowData={data || []} 
-        columnDefs={columnDefs} 
-        components={components} 
-        theme="legacy"
-        context={{ daysList, config, preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView, hideOff, optionalCoverage, onToggleOptionalCoverage, onToggleGlobalOptional }}
-        defaultColDef={{ resizable: true, sortable: false, filter: false, suppressHeaderMenuButton: true }} 
-        headerHeight={140} 
-        rowHeight={50}     
-      />
-    </div>
-  );
-};
-
-export default PlanningTable;
