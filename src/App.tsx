@@ -56,7 +56,7 @@ function App() {
   const [planning, setPlanning] = useState<any[]>([]);
   
   const [softConstraints, setSoftConstraints] = useState<Set<string>>(new Set());
-  const [hideOff, setHideOff] = useState(false);
+  const [hideOff, setHideOff] = useState(true); 
   
   // Format : { "1": ["M", "S"] }
   const [optionalCoverage, setOptionalCoverage] = useState<Record<string, string[]>>({});
