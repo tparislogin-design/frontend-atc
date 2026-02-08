@@ -131,7 +131,7 @@ const AgentCellRenderer = (props: any) => {
     );
 };
 
-// --- 4. SHIFT CELL (CORRIGÉ POUR OFF MASQUÉ MAIS BORDURE VISIBLE) ---
+// --- 4. SHIFT CELL (CORRIGÉ POUR OFF) ---
 const ShiftCellRenderer = (props: any) => {
     const rawVal = props.value;
     const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView, hideOff } = props.context || {};
@@ -147,15 +147,18 @@ const ShiftCellRenderer = (props: any) => {
 
     const displayVal = normalize(rawVal);
     
-    // Si vide, on n'affiche rien du tout
+    // Si vide, on n'affiche rien
     if (displayVal === '') return null;
 
-    // LOGIQUE D'AFFICHAGE DU TEXTE OFF
-    // Si c'est OFF, qu'on n'est pas en vue Désidérata, et que l'utilisateur veut masquer les OFF
-    const isOffHidden = displayVal === 'OFF' && !isDesiderataView && hideOff;
-    const textToDisplay = isOffHidden ? '' : displayVal; // Texte vide mais cellule présente
+    // --- LOGIQUE TEXTE OFF ---
+    let textToDisplay = displayVal;
+    
+    // Si c'est OFF, qu'on est pas en Désidérata, et que hideOff est actif -> Texte vide
+    if (displayVal === 'OFF' && !isDesiderataView && hideOff) {
+        textToDisplay = ''; 
+    }
 
-    // Analyse de la demande
+    // Analyse de la demande pour les bordures
     const dayStr = safeString(dayNum);
     const rawRequest = preAssignments && preAssignments[agentName] ? preAssignments[agentName][dayStr] : '';
     let allowedCodes: string[] = [];
@@ -169,39 +172,47 @@ const ShiftCellRenderer = (props: any) => {
     const cellKey = `${agentName}_${dayNum}`;
     const isSoft = softConstraints && softConstraints.has(cellKey);
 
-    // BORDURES
+    // --- BORDURES ---
     const getBorderStyle = () => {
         if (isDesiderataView) return isSoft ? '2px solid #9333ea' : '1px solid #cbd5e1';
         if (showDesiderataMatch && hasRequest) {
             if (isMatch) return '2px solid #16a34a'; // Vert
             return '2px solid #ef4444'; // Rouge
         }
+        // Par défaut: on prend la bordure définie dans le style (qui sera transparent pour OFF)
+        // Mais pour garder la grille propre, on peut vouloir '1px solid #e2e8f0' très léger
+        // ou '1px solid transparent' pour le OFF. 
+        // Ici on utilise la bordure du style défini plus bas.
         return `1px solid ${style.border}`;
     };
 
-    // COULEURS DE FOND
+    // --- STYLES & COULEURS ---
     let style = { color: '#334155', bg: '#f1f5f9', border: '#cbd5e1' }; 
     const styleKey = displayVal; 
 
-    // Si OFF est masqué, on force le fond blanc pour faire "vide"
-    if (isOffHidden) {
-        style = { color: 'transparent', bg: '#ffffff', border: '#e2e8f0' };
-    } else {
-        switch (styleKey) {
-            case 'M': style = { color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' }; break;
-            case 'J1':
-            case 'J2':
-            case 'J3': style = { color: '#16a34a', bg: '#dcfce7', border: '#86efac' }; break;
-            case 'A1': style = { color: '#d97706', bg: '#ffedd5', border: '#fed7aa' }; break;
-            case 'A2': style = { color: '#dc2626', bg: '#fee2e2', border: '#fecaca' }; break;
-            case 'S': style = { color: '#9333ea', bg: '#f3e8ff', border: '#d8b4fe' }; break;
-            case 'C': style = { color: '#db2777', bg: '#fce7f3', border: '#fbcfe8' }; break;
-            case 'OFF': style = { color: '#94a3b8', bg: '#f8fafc', border: '#e2e8f0' }; break;
-            case 'FSAU':
-            case 'FH': style = { color: '#b45309', bg: '#fef3c7', border: '#fde68a' }; break;
-            case 'B': style = { color: '#475569', bg: '#ffffff', border: '#e2e8f0' }; break;
-            default: break;
-        }
+    switch (styleKey) {
+        case 'M': style = { color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' }; break;
+        case 'J1':
+        case 'J2':
+        case 'J3': style = { color: '#16a34a', bg: '#dcfce7', border: '#86efac' }; break;
+        case 'A1': style = { color: '#d97706', bg: '#ffedd5', border: '#fed7aa' }; break;
+        case 'A2': style = { color: '#dc2626', bg: '#fee2e2', border: '#fecaca' }; break;
+        case 'S': style = { color: '#9333ea', bg: '#f3e8ff', border: '#d8b4fe' }; break;
+        case 'C': style = { color: '#db2777', bg: '#fce7f3', border: '#fbcfe8' }; break;
+        
+        case 'OFF': 
+            // MODIFICATION DEMANDÉE : Fond Blanc, Texte Noir, Bordure transparente/blanche
+            style = { 
+                color: '#000000', 
+                bg: '#ffffff', 
+                border: 'transparent' // Pas de cadre gris
+            }; 
+            break;
+
+        case 'FSAU':
+        case 'FH': style = { color: '#b45309', bg: '#fef3c7', border: '#fde68a' }; break;
+        case 'B': style = { color: '#475569', bg: '#ffffff', border: '#e2e8f0' }; break;
+        default: break;
     }
 
     const handleContextMenu = (e: React.MouseEvent) => {
@@ -219,6 +230,7 @@ const ShiftCellRenderer = (props: any) => {
     }
 
     const finalBorder = getBorderStyle();
+    // Détection pour l'ombre portée (Glow effect)
     const isRed = finalBorder.includes('#ef4444');
     const isGreen = finalBorder.includes('#16a34a');
     const isPurple = finalBorder.includes('#9333ea');
@@ -238,7 +250,6 @@ const ShiftCellRenderer = (props: any) => {
                 color: style.color, 
                 border: finalBorder,
                 borderRadius: '6px', 
-                // Si le texte est masqué, le padding ne sert pas, mais on garde pour la structure
                 padding: (isRed || isGreen || isPurple) ? '1px 0' : '2px 0', 
                 fontSize: '10px', 
                 fontWeight: '700',
@@ -248,7 +259,7 @@ const ShiftCellRenderer = (props: any) => {
                     ? '0 0 4px rgba(239, 68, 68, 0.5)' 
                     : (isGreen 
                         ? '0 0 4px rgba(22, 163, 74, 0.5)'
-                        : (isPurple ? '0 0 4px rgba(147, 51, 234, 0.5)' : '0 1px 2px rgba(0,0,0,0.03)')), 
+                        : (isPurple ? '0 0 4px rgba(147, 51, 234, 0.5)' : 'none')), // Pas d'ombre par défaut sur OFF
                 display: 'inline-block',
                 transform: (isRed || isGreen || isPurple) ? 'scale(1.05)' : 'scale(1)',
                 transition: 'all 0.1s'
