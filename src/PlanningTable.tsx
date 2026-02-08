@@ -8,18 +8,13 @@ import "ag-grid-community/styles/ag-theme-balham.css";
 
 ModuleRegistry.registerModules([ AllCommunityModule ]);
 
-// ==========================================
-// 1. HELPER (Doit être déclaré en PREMIER)
-// ==========================================
+// --- HELPER SÉCURITÉ ---
 const safeString = (val: any): string => {
     if (val === null || val === undefined) return '';
     return String(val);
 };
 
-// ==========================================
-// 2. COMPOSANTS INTERNES (Headers & Cells)
-// ==========================================
-
+// --- 1. HEADER GLOBAL ---
 const GlobalHeader = (props: any) => {
     const { config, context } = props;
     const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
@@ -46,6 +41,7 @@ const GlobalHeader = (props: any) => {
     );
 };
 
+// --- 2. HEADER QUOTIDIEN ---
 const CustomHeader = (props: any) => {
     const { displayName, dayNum, fullDate, api, config, context } = props;
     const { optionalCoverage, onToggleOptionalCoverage, isDesiderataView } = context || {};
@@ -85,6 +81,7 @@ const CustomHeader = (props: any) => {
     );
 };
 
+// --- 3. AGENT CELL ---
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
     const rowData = props.data;
@@ -134,6 +131,7 @@ const AgentCellRenderer = (props: any) => {
     );
 };
 
+// --- 4. SHIFT CELL (CORRIGÉ : "OFF" Transparent) ---
 const ShiftCellRenderer = (props: any) => {
     const rawVal = props.value;
     const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView, hideOff } = props.context || {};
@@ -148,8 +146,10 @@ const ShiftCellRenderer = (props: any) => {
 
     const displayVal = normalize(rawVal);
     
+    // Si vide, on n'affiche rien
     if (displayVal === '') return null;
 
+    // Analyse de la demande pour les bordures
     const dayStr = safeString(dayNum);
     const rawRequest = preAssignments && preAssignments[agentName] ? preAssignments[agentName][dayStr] : '';
     let allowedCodes: string[] = [];
@@ -163,15 +163,17 @@ const ShiftCellRenderer = (props: any) => {
     const cellKey = `${agentName}_${dayNum}`;
     const isSoft = softConstraints && softConstraints.has(cellKey);
 
+    // BORDURES
     const getBorderStyle = () => {
         if (isDesiderataView) return isSoft ? '2px solid #9333ea' : '1px solid #cbd5e1';
         if (showDesiderataMatch && hasRequest) {
-            if (isMatch) return '2px solid #16a34a'; 
-            return '2px solid #ef4444'; 
+            if (isMatch) return '2px solid #16a34a'; // Vert
+            return '2px solid #ef4444'; // Rouge
         }
         return `1px solid ${style.border}`;
     };
 
+    // --- STYLES & COULEURS ---
     let style = { color: '#334155', bg: '#f1f5f9', border: '#cbd5e1' }; 
     const styleKey = displayVal; 
 
@@ -186,10 +188,21 @@ const ShiftCellRenderer = (props: any) => {
         case 'C': style = { color: '#db2777', bg: '#fce7f3', border: '#fbcfe8' }; break;
         
         case 'OFF': 
+            // MODIFICATION ICI : FOND TRANSPARENT
             if (!isDesiderataView && hideOff) {
-                style = { color: 'transparent', bg: '#ffffff', border: 'transparent' };
+                // Masqué : Texte Transparent, Fond Transparent (laisse voir le gris du WE)
+                style = { 
+                    color: 'transparent', 
+                    bg: 'transparent',  
+                    border: 'transparent' 
+                };
             } else {
-                style = { color: '#000000', bg: '#ffffff', border: 'transparent' }; 
+                // Visible : Texte Gris, Fond Transparent (laisse voir le gris du WE)
+                style = { 
+                    color: '#94a3b8', 
+                    bg: 'transparent', 
+                    border: 'transparent' 
+                }; 
             }
             break;
 
@@ -253,10 +266,7 @@ const ShiftCellRenderer = (props: any) => {
     );
 };
 
-// ==========================================
-// 3. COMPOSANT PRINCIPAL
-// ==========================================
-
+// --- 5. MAIN ---
 interface PlanningTableProps {
   data: any[];
   year: number;
@@ -274,82 +284,3 @@ interface PlanningTableProps {
   onToggleOptionalCoverage?: (day: number, shift: string) => void;
   onToggleGlobalOptional?: (shift: string) => void;
 }
-
-const PlanningTable: React.FC<PlanningTableProps> = ({ 
-  data, year, startDay, endDay, config, 
-  isDesiderataView = false,
-  preAssignments = {}, 
-  showDesiderataMatch = false,
-  zoomLevel = 100,
-  softConstraints,
-  onToggleSoft,
-  hideOff = false,
-  optionalCoverage,
-  onToggleOptionalCoverage,
-  onToggleGlobalOptional
-}) => {
-
-  const components = useMemo(() => ({
-      agColumnHeader: CustomHeader,
-      agColumnHeaderGlobal: GlobalHeader,
-      agentCellRenderer: AgentCellRenderer,
-      shiftCellRenderer: ShiftCellRenderer
-  }), []);
-
-  const daysList = useMemo(() => {
-    const list = [];
-    if (startDay <= endDay) { for (let i = startDay; i <= endDay; i++) list.push(i); } 
-    else { for (let i = startDay; i <= 365; i++) list.push(i); for (let i = 1; i <= endDay; i++) list.push(i); }
-    return list;
-  }, [startDay, endDay]);
-
-  const columnDefs = useMemo<ColDef[]>(() => {
-    const cols: ColDef[] = [{ field: 'Agent', headerName: 'CONTRÔLEUR', pinned: 'left', width: 140, cellRenderer: 'agentCellRenderer', cellStyle: { backgroundColor: '#f8fafc', borderRight: '2px solid #cbd5e1', display:'flex', alignItems:'center', padding:0 } }];
-    
-    if (isDesiderataView) {
-        cols.push({
-            field: 'Global', headerName: 'GLOBAL', pinned: 'left', width: 50,
-            headerComponent: 'agColumnHeaderGlobal',
-            headerComponentParams: { config: config, context: { optionalCoverage, onToggleGlobalOptional, daysList } },
-            cellStyle: { background: '#f8fafc', borderRight: '1px solid #cbd5e1' },
-            cellRenderer: () => null
-        });
-    }
-
-    daysList.forEach(dayNum => {
-      const dayStr = safeString(dayNum);
-      let currentYear = year;
-      if (startDay > endDay && dayNum >= startDay) currentYear = year - 1; 
-      const date = new Date(currentYear, 0, dayNum); 
-      const dateStr = date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-      const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-
-      cols.push({
-        field: dayStr, width: 52, headerClass: isWeekend ? 'weekend-header' : '',
-        headerComponentParams: { displayName: date.toLocaleDateString('fr-FR', { weekday: 'short' }), dayNum: dayNum, fullDate: dateStr, config: config, context: { optionalCoverage, onToggleOptionalCoverage, isDesiderataView } },
-        cellRenderer: 'shiftCellRenderer',
-        cellStyle: { display: 'flex', justifyContent: 'center', alignItems: 'center', borderRight: '1px solid #cbd5e1', padding: 0, backgroundColor: isWeekend ? '#e5e7eb' : 'white' },
-        editable: false 
-      });
-    });
-    return cols; 
-  }, [year, startDay, endDay, isDesiderataView, daysList, config, optionalCoverage]);
-
-  return (
-    <div className="ag-theme-balham" style={{ height: '100%', width: '100%', zoom: `${zoomLevel}%` }}>
-      <style>{`.ag-theme-balham .ag-header-cell { padding: 0 !important; } .ag-theme-balham .ag-header-cell-label { width: 100%; height: 100%; padding: 0; } .ag-theme-balham .ag-root-wrapper { border: 1px solid #94a3b8; } .ag-theme-balham .ag-header { border-bottom: 2px solid #cbd5e1; background-color: white; } .ag-theme-balham .ag-row { border-bottom-color: #cbd5e1; } .ag-theme-balham .ag-pinned-left-header { border-right: 2px solid #cbd5e1; } .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; } .ag-theme-balham .weekend-header { background-color: #e5e7eb !important; border-bottom: 1px solid #cbd5e1; }`}</style>
-      <AgGridReact 
-        rowData={data || []} 
-        columnDefs={columnDefs} 
-        components={components} 
-        theme="legacy"
-        context={{ daysList, config, preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView, hideOff, optionalCoverage, onToggleOptionalCoverage, onToggleGlobalOptional }}
-        defaultColDef={{ resizable: true, sortable: false, filter: false, suppressHeaderMenuButton: true }} 
-        headerHeight={140} 
-        rowHeight={50}     
-      />
-    </div>
-  );
-};
-
-export default PlanningTable;
