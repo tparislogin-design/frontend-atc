@@ -13,7 +13,23 @@ import { decimalToTime, timeToDecimal } from './utils/timeConverters';
 // Import de TYPE
 import type { AppConfig } from './utils/types';
 
+// ==========================================
+// 1. STYLES & CONSTANTES (Définis en PREMIER)
+// ==========================================
+
 const API_URL = "https://ttttty-ty.hf.space/api/optimize"; 
+
+const sidebarSectionStyle: React.CSSProperties = { padding: 20, borderBottom: '1px solid #f1f5f9' };
+const sidebarTitleStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#64748b', letterSpacing: 0.5, marginBottom: 12, marginTop: 0, textTransform: 'uppercase' };
+const labelStyle: React.CSSProperties = { fontSize: 12, color: '#475569', fontWeight: 500 };
+const inputStyle: React.CSSProperties = { width: '100%', padding: '8px', fontSize: 12, border: '1px solid #cbd5e1', borderRadius: 4, marginTop: 4, boxSizing: 'border-box' };
+const secondaryButtonStyle: React.CSSProperties = { width: '100%', background: '#22c55e', color: 'white', border: 'none', padding: '8px', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', marginTop: 10 };
+const rowStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 };
+const numberInputStyle: React.CSSProperties = { width: 50, padding: '4px 8px', textAlign: 'right', fontSize: 12, border: '1px solid #cbd5e1', borderRadius: 4, fontWeight: 600, color: '#334155' };
+
+const selectStyle: React.CSSProperties = { padding: 6, borderRadius: 4, border: '1px solid #cbd5e1', fontSize: 12 };
+const addButtonStyle = (col: string, bg: string, bord: string): React.CSSProperties => ({ fontSize: 11, padding: '4px 12px', background: bg, color: col, border: `1px solid ${bord}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 });
+const tagStyle = (col: string, bg: string, bord: string): React.CSSProperties => ({ display: 'flex', alignItems: 'center', background: bg, border: `1px solid ${bord}`, borderRadius: 6, padding: '4px 8px', fontSize: 12, color: col, fontWeight: 600 });
 
 const DEFAULT_CONFIG: AppConfig = {
   ANNEE: 2026,
@@ -27,6 +43,7 @@ const DEFAULT_CONFIG: AppConfig = {
     "A1": { debut: 13.0, fin: 22.0 },
     "A2": { debut: 15.0, fin: 23.0 }
   },
+  CYCLES: {}, 
   CONTRAT: { 
     MIN_REST_HOURS: 11,
     MAX_CONSECUTIVE_SHIFTS: 4, 
@@ -40,37 +57,19 @@ const DEFAULT_CONFIG: AppConfig = {
 // --- COMPOSANT INTERNE : TIME INPUT ---
 const TimeInput = ({ val, onSave }: { val: number, onSave: (v: number) => void }) => {
     const [displayVal, setDisplayVal] = useState(decimalToTime(val));
-
-    useEffect(() => {
-        setDisplayVal(decimalToTime(val));
-    }, [val]);
-
-    const handleBlur = () => {
-        const decimal = timeToDecimal(displayVal);
-        setDisplayVal(decimalToTime(decimal)); 
-        onSave(decimal); 
-    };
-
-    return (
-        <input 
-            type="text" 
-            value={displayVal}
-            onChange={(e) => setDisplayVal(e.target.value)}
-            onBlur={handleBlur}
-            onKeyDown={(e) => { if(e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-            style={{
-                width: 50, fontSize: 12, textAlign: 'center', 
-                border: '1px solid #cbd5e1', borderRadius: 4, padding: '4px',
-                fontWeight: '600', color: '#1e293b', fontFamily:'monospace'
-            }} 
-        />
-    );
+    useEffect(() => { setDisplayVal(decimalToTime(val)); }, [val]);
+    const handleBlur = () => { onSave(timeToDecimal(displayVal)); setDisplayVal(decimalToTime(timeToDecimal(displayVal))); };
+    return ( <input type="text" value={displayVal} onChange={(e) => setDisplayVal(e.target.value)} onBlur={handleBlur} onKeyDown={(e) => { if(e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} style={{ width: 50, fontSize: 12, textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: 4, padding: '4px', fontWeight: '600', color: '#1e293b', fontFamily:'monospace' }} /> );
 };
+
+// ==========================================
+// 2. COMPOSANT PRINCIPAL APP
+// ==========================================
 
 function App() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   
-  // États locaux
+  // États App
   const [year, setYear] = useState(2026);
   const [startDay, setStartDay] = useState(1); 
   const [endDay, setEndDay] = useState(28);
@@ -79,13 +78,8 @@ function App() {
   const [preAssignments, setPreAssignments] = useState<any>({});
   const [planning, setPlanning] = useState<any[]>([]);
   
-  // État pour les contraintes souples (violettes)
   const [softConstraints, setSoftConstraints] = useState<Set<string>>(new Set());
-
-  // État pour masquer les OFF dans le planning (TRUE par défaut)
-  const [hideOff, setHideOff] = useState(true); // <--- CORRECTION ICI
-
-  // Format : { "1": ["M", "S"] }
+  const [hideOff, setHideOff] = useState(true);
   const [optionalCoverage, setOptionalCoverage] = useState<Record<string, string[]>>({});
 
   const [loading, setLoading] = useState(false);
@@ -94,6 +88,13 @@ function App() {
   const [zoomLevel, setZoomLevel] = useState(100);
   const [showDesiderataMatch, setShowDesiderataMatch] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
+
+  // États Onglet Config (Cycles)
+  const [selectedAgentConfig, setSelectedAgentConfig] = useState<string>("");
+  const [newCycleOr1, setNewCycleOr1] = useState("");
+  const [newCycleOr2, setNewCycleOr2] = useState("");
+  const [newCycleAg1, setNewCycleAg1] = useState("");
+  const [newCycleAg2, setNewCycleAg2] = useState("");
 
   useEffect(() => {
     const saved = localStorage.getItem('tds_config');
@@ -104,7 +105,7 @@ function App() {
     }
   }, []);
 
-  // --- GESTION CONFIG ---
+  // --- CONFIG HELPERS ---
   const updateConfig = (newConfig: AppConfig) => { setConfig(newConfig); localStorage.setItem('tds_config', JSON.stringify(newConfig)); };
   const handleYearChange = (val: string) => { setYear(parseInt(val) || 2026); updateConfig({ ...config, ANNEE: parseInt(val) || 2026 }); };
   const handleContratChange = (field: keyof typeof config.CONTRAT, val: string) => { updateConfig({ ...config, CONTRAT: { ...config.CONTRAT, [field]: parseInt(val) || 0 } }); };
@@ -120,6 +121,7 @@ function App() {
       updateConfig({ ...config, VACATIONS: v });
   };
   const handleChangeVacation = (code: string, f: string, v: number) => {
+      // @ts-ignore
       updateConfig({ ...config, VACATIONS: { ...config.VACATIONS, [code]: { ...config.VACATIONS[code], [f]: v } } });
   };
 
@@ -133,22 +135,68 @@ function App() {
       updateConfig({ ...config, CONTROLLERS_AFFECTES_BUREAU: (config.CONTROLLERS_AFFECTES_BUREAU || []).filter(a => a !== agent) });
   };
 
+  // --- GESTION CYCLES ---
+  const handleAddCycle = (type: 'OR' | 'ARGENT') => {
+      if (!selectedAgentConfig) return;
+      const v1 = type === 'OR' ? newCycleOr1 : newCycleAg1;
+      const v2 = type === 'OR' ? newCycleOr2 : newCycleAg2;
+      
+      if (!v1 || !v2) return alert("Sélectionnez 2 vacations");
+
+      const currentCycles = config.CYCLES || {};
+      const agentCycles = currentCycles[selectedAgentConfig] || { OR: [], ARGENT: [] };
+      const list = agentCycles[type] || [];
+      
+      const exists = list.some((pair: string[]) => pair[0] === v1 && pair[1] === v2);
+      if (exists) return;
+
+      const newAgentCycles = { ...agentCycles, [type]: [...list, [v1, v2]] };
+      const newCycles = { ...currentCycles, [selectedAgentConfig]: newAgentCycles };
+      
+      updateConfig({ ...config, CYCLES: newCycles });
+  };
+
+  const handleDeleteCycle = (type: 'OR' | 'ARGENT', idx: number) => {
+      if (!selectedAgentConfig) return;
+      const currentCycles = config.CYCLES || {};
+      const agentCycles = currentCycles[selectedAgentConfig];
+      if (!agentCycles) return;
+
+      const list = [...(agentCycles[type] || [])];
+      list.splice(idx, 1);
+
+      const newAgentCycles = { ...agentCycles, [type]: list };
+      updateConfig({ ...config, CYCLES: { ...currentCycles, [selectedAgentConfig]: newAgentCycles } });
+  };
+
+  // --- AUTRES HANDLERS ---
   const handleExportConfig = () => {
       const data = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
       const a = document.createElement('a'); a.href = data; a.download = `tds_config_${year}.json`; a.click();
   };
-  const handleImportConfig = (e: any) => {
-      const fr = new FileReader();
-      fr.onload = (ev) => {
-          try {
-              const c = JSON.parse(ev.target?.result as string);
-              if (c.VACATIONS) { setConfig(c); if(c.ANNEE) setYear(c.ANNEE); alert("OK"); }
-          } catch(err) { alert("Erreur fichier"); }
-      };
-      if (e.target.files[0]) fr.readAsText(e.target.files[0]);
+  const handleImportConfig = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const fileReader = new FileReader();
+      if (event.target.files && event.target.files[0]) {
+          fileReader.readAsText(event.target.files[0], "UTF-8");
+          fileReader.onload = (e) => {
+              try {
+                  if (e.target?.result) {
+                      const importedConfig = JSON.parse(e.target.result as string);
+                      if (importedConfig.VACATIONS) {
+                          setConfig(importedConfig);
+                          if (importedConfig.ANNEE) setYear(importedConfig.ANNEE);
+                          alert("Configuration chargée avec succès !");
+                      } else {
+                          alert("Erreur : Fichier invalide.");
+                      }
+                  }
+              } catch (err) {
+                  alert("Erreur de lecture du fichier.");
+              }
+          };
+      }
   };
 
-  // --- TOGGLES ---
   const handleToggleSoft = (agent: string, day: number) => {
       const key = `${agent}_${day}`;
       const s = new Set(softConstraints);
@@ -156,18 +204,14 @@ function App() {
       setSoftConstraints(s);
   };
   const handleToggleAllSoft = () => {
-      const all = new Set<string>();
+      const allKeys = new Set<string>();
       let count = 0;
       Object.entries(preAssignments).forEach(([a, days]: [string, any]) => {
-          Object.keys(days).forEach(d => { if (days[d]) { all.add(`${a}_${d}`); count++; } });
+          Object.keys(days).forEach(d => { if (days[d]) { allKeys.add(`${a}_${d}`); count++; } });
       });
       if (count === 0) return alert("Rien à cercler");
-      setSoftConstraints(softConstraints.size === count ? new Set() : all);
+      setSoftConstraints(softConstraints.size === count ? new Set() : allKeys);
   };
-
-  // --- GESTION COUVERTURE OPTIONNELLE ---
-  
-  // 1. Bascule pour 1 jour
   const handleToggleOptionalCoverage = (dayNum: number, shiftCode: string) => {
       const dayStr = dayNum.toString();
       const current = optionalCoverage[dayStr] || [];
@@ -176,45 +220,34 @@ function App() {
       else next = [...current, shiftCode];
       setOptionalCoverage({ ...optionalCoverage, [dayStr]: next });
   };
-
-  // 2. Bascule GLOBALE (Toute la période)
   const handleToggleGlobalOptional = (shiftCode: string) => {
       const daysList = [];
-      if (startDay <= endDay) {
-          for (let i = startDay; i <= endDay; i++) daysList.push(i.toString());
-      } else {
-          for (let i = startDay; i <= 365; i++) daysList.push(i.toString());
-          for (let i = 1; i <= endDay; i++) daysList.push(i.toString());
-      }
-
+      if (startDay <= endDay) { for (let i = startDay; i <= endDay; i++) daysList.push(i.toString()); }
+      else { for (let i = startDay; i <= 365; i++) daysList.push(i.toString()); for (let i = 1; i <= endDay; i++) daysList.push(i.toString()); }
+      
       const isAlreadyOptionalEverywhere = daysList.every(dayStr => {
           return optionalCoverage[dayStr] && optionalCoverage[dayStr].includes(shiftCode);
       });
-
       const newCoverage = { ...optionalCoverage };
-
       daysList.forEach(dayStr => {
           const currentList = newCoverage[dayStr] || [];
-          if (isAlreadyOptionalEverywhere) {
-              newCoverage[dayStr] = currentList.filter(s => s !== shiftCode);
-          } else {
-              if (!currentList.includes(shiftCode)) {
-                  newCoverage[dayStr] = [...currentList, shiftCode];
-              }
-          }
+          if (isAlreadyOptionalEverywhere) newCoverage[dayStr] = currentList.filter(s => s !== shiftCode);
+          else if (!currentList.includes(shiftCode)) newCoverage[dayStr] = [...currentList, shiftCode];
       });
-
       setOptionalCoverage(newCoverage);
   };
 
   const handleImport = async () => {
-      setStatus({type:'loading', msg:'Lecture...'});
-      try {
-          const data = await parseGoogleSheet(sheetUrl, startDay, endDay);
-          setPreAssignments(data); setSoftConstraints(new Set());
-          setStatus({type:'success', msg: `OK (${Object.keys(data).length} agents)`});
-          setActiveTab('desiderata');
-      } catch (e: any) { setStatus({type:'error', msg: e.toString()}); }
+    setStatus({type:'loading', msg:'📡 Lecture...'});
+    try {
+        const data = await parseGoogleSheet(sheetUrl, startDay, endDay); 
+        setPreAssignments(data);
+        setSoftConstraints(new Set()); 
+        setStatus({type:'success', msg: `✅ Import OK (${Object.keys(data).length} agents)`});
+        setActiveTab('desiderata');
+    } catch (e: any) {
+        setStatus({type:'error', msg: `❌ Erreur: ${e.toString()}`});
+    }
   };
 
   const handleOptimize = async () => {
@@ -233,6 +266,101 @@ function App() {
   };
 
   const gridData = activeTab === 'desiderata' ? convertPreAssignmentsToRows(preAssignments) : planning;
+
+  // --- RENDU CONFIG TAB ---
+  const renderConfigTab = () => {
+      const shifts = Object.keys(config.VACATIONS);
+      const agentCycles = (config.CYCLES || {})[selectedAgentConfig] || { OR: [], ARGENT: [] };
+
+      return (
+          <div style={{display:'flex', height:'100%'}}>
+              {/* LISTE GAUCHE */}
+              <div style={{width: 200, borderRight:'1px solid #e2e8f0', overflowY:'auto', background:'#f8fafc', padding:10}}>
+                  <h4 style={{marginTop:0, color:'#64748b', fontSize:11, textTransform:'uppercase'}}>Agents</h4>
+                  {config.CONTROLEURS.map(c => (
+                      <div 
+                        key={c} 
+                        onClick={() => setSelectedAgentConfig(c)}
+                        style={{
+                            padding:'8px 12px', cursor:'pointer', borderRadius:6, marginBottom:2, fontSize:13, fontWeight:600,
+                            background: selectedAgentConfig === c ? 'white' : 'transparent',
+                            color: selectedAgentConfig === c ? '#2563eb' : '#475569',
+                            boxShadow: selectedAgentConfig === c ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                            border: selectedAgentConfig === c ? '1px solid #e2e8f0' : '1px solid transparent'
+                        }}
+                      >
+                          {c}
+                      </div>
+                  ))}
+              </div>
+
+              {/* CONTENU DROITE */}
+              <div style={{flex:1, padding:30, overflowY:'auto'}}>
+                  {!selectedAgentConfig ? (
+                      <div style={{color:'#94a3b8', textAlign:'center', marginTop:50}}>Sélectionnez un agent à gauche pour configurer ses habitudes.</div>
+                  ) : (
+                      <div>
+                          <h2 style={{marginTop:0, color:'#1e293b'}}>Cycles & Habitudes : <span style={{color:'#2563eb'}}>{selectedAgentConfig}</span></h2>
+                          <p style={{fontSize:13, color:'#64748b', marginBottom:30}}>Définissez les enchaînements préférés de cet agent. Le solveur essaiera de les respecter en priorité (Bonus).</p>
+
+                          {/* SECTION OR */}
+                          <div style={{marginBottom:30, background:'#fffbeb', border:'1px solid #fcd34d', borderRadius:8, padding:20}}>
+                              <h3 style={{marginTop:0, color:'#b45309', fontSize:14}}>🥇 Séquences OR (Priorité Haute)</h3>
+                              <div style={{display:'flex', gap:10, marginBottom:15, alignItems:'center'}}>
+                                  <select style={selectStyle} value={newCycleOr1} onChange={e=>setNewCycleOr1(e.target.value)}>
+                                      <option value="">J</option>
+                                      {shifts.map(s=><option key={s} value={s}>{s}</option>)}
+                                  </select>
+                                  <span>➜</span>
+                                  <select style={selectStyle} value={newCycleOr2} onChange={e=>setNewCycleOr2(e.target.value)}>
+                                      <option value="">J+1</option>
+                                      {shifts.map(s=><option key={s} value={s}>{s}</option>)}
+                                  </select>
+                                  <button onClick={()=>handleAddCycle('OR')} style={addButtonStyle('#b45309', '#fffbeb', '#fcd34d')}>+ Ajouter</button>
+                              </div>
+                              <div style={{display:'flex', flexWrap:'wrap', gap:10}}>
+                                  {agentCycles.OR?.map((pair: string[], idx: number) => (
+                                      <div key={idx} style={tagStyle('#b45309', '#fff7ed', '#fed7aa')}>
+                                          {pair[0]} ➜ {pair[1]} 
+                                          <span onClick={()=>handleDeleteCycle('OR', idx)} style={{cursor:'pointer', marginLeft:8, fontWeight:'bold'}}>×</span>
+                                      </div>
+                                  ))}
+                                  {(!agentCycles.OR || agentCycles.OR.length===0) && <span style={{fontSize:12, color:'#d97706', fontStyle:'italic'}}>Aucune séquence définie.</span>}
+                              </div>
+                          </div>
+
+                          {/* SECTION ARGENT */}
+                          <div style={{background:'#f8fafc', border:'1px solid #cbd5e1', borderRadius:8, padding:20}}>
+                              <h3 style={{marginTop:0, color:'#475569', fontSize:14}}>🥈 Séquences ARGENT (Priorité Moyenne)</h3>
+                              <div style={{display:'flex', gap:10, marginBottom:15, alignItems:'center'}}>
+                                  <select style={selectStyle} value={newCycleAg1} onChange={e=>setNewCycleAg1(e.target.value)}>
+                                      <option value="">J</option>
+                                      {shifts.map(s=><option key={s} value={s}>{s}</option>)}
+                                  </select>
+                                  <span>➜</span>
+                                  <select style={selectStyle} value={newCycleAg2} onChange={e=>setNewCycleAg2(e.target.value)}>
+                                      <option value="">J+1</option>
+                                      {shifts.map(s=><option key={s} value={s}>{s}</option>)}
+                                  </select>
+                                  <button onClick={()=>handleAddCycle('ARGENT')} style={addButtonStyle('#475569', '#f1f5f9', '#cbd5e1')}>+ Ajouter</button>
+                              </div>
+                              <div style={{display:'flex', flexWrap:'wrap', gap:10}}>
+                                  {agentCycles.ARGENT?.map((pair: string[], idx: number) => (
+                                      <div key={idx} style={tagStyle('#475569', '#f8fafc', '#e2e8f0')}>
+                                          {pair[0]} ➜ {pair[1]} 
+                                          <span onClick={()=>handleDeleteCycle('ARGENT', idx)} style={{cursor:'pointer', marginLeft:8, fontWeight:'bold'}}>×</span>
+                                      </div>
+                                  ))}
+                                  {(!agentCycles.ARGENT || agentCycles.ARGENT.length===0) && <span style={{fontSize:12, color:'#94a3b8', fontStyle:'italic'}}>Aucune séquence définie.</span>}
+                              </div>
+                          </div>
+
+                      </div>
+                  )}
+              </div>
+          </div>
+      );
+  };
 
   return (
     <div style={{display: 'flex', flexDirection: 'column', height: '100vh', background: '#f8fafc', fontFamily: 'sans-serif'}}>
@@ -262,7 +390,7 @@ function App() {
         <div style={{flex:1, display:'flex', overflow:'hidden'}}>
             <div style={{flex:1, display:'flex', flexDirection:'column'}}>
                 {status.msg && <div style={{padding:10, background: status.type==='error'?'#fee2e2':'#dcfce7', color: status.type==='error'?'#b91c1c':'#15803d'}}>{status.msg}</div>}
-                <div style={{flex:1, background:'white'}}>
+                <div style={{flex:1, background:'white', overflow:'hidden'}}>
                     {(activeTab === 'planning' || activeTab === 'desiderata') && (
                         <PlanningTable 
                             data={gridData} year={year} startDay={startDay} endDay={endDay} config={config}
@@ -275,11 +403,11 @@ function App() {
                         />
                     )}
                     {activeTab === 'bilan' && <Bilan planning={planning} config={config} year={year} startDay={startDay} endDay={endDay} />}
-                    {activeTab === 'config' && <div style={{padding:50, textAlign:'center', color:'#94a3b8'}}>Configuration à droite 👉</div>}
+                    {activeTab === 'config' && renderConfigTab()}
                 </div>
             </div>
 
-            {showSidebar && (
+            {showSidebar && activeTab !== 'config' && (
                 <div style={{width:320, background:'white', borderLeft:'1px solid #e2e8f0', padding:20, overflowY:'auto'}}>
                     <div style={sidebarSectionStyle}>
                         <h3 style={{...sidebarTitleStyle, color:'#8b5cf6'}}>💾 SAUVEGARDE CONFIG</h3>
@@ -341,14 +469,5 @@ function App() {
     </div>
   );
 }
-
-// Styles inchangés...
-const sidebarSectionStyle: React.CSSProperties = { padding: 20, borderBottom: '1px solid #f1f5f9' };
-const sidebarTitleStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#64748b', letterSpacing: 0.5, marginBottom: 12, marginTop: 0, textTransform: 'uppercase' };
-const labelStyle: React.CSSProperties = { fontSize: 12, color: '#475569', fontWeight: 500 };
-const inputStyle: React.CSSProperties = { width: '100%', padding: '8px', fontSize: 12, border: '1px solid #cbd5e1', borderRadius: 4, marginTop: 4, boxSizing: 'border-box' };
-const secondaryButtonStyle: React.CSSProperties = { width: '100%', background: '#22c55e', color: 'white', border: 'none', padding: '8px', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', marginTop: 10 };
-const rowStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 };
-const numberInputStyle: React.CSSProperties = { width: 50, padding: '4px 8px', textAlign: 'right', fontSize: 12, border: '1px solid #cbd5e1', borderRadius: 4, fontWeight: 600, color: '#334155' };
 
 export default App;
