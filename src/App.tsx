@@ -37,16 +37,40 @@ const DEFAULT_CONFIG: AppConfig = {
   }
 };
 
+// --- COMPOSANT INTERNE : TIME INPUT ---
 const TimeInput = ({ val, onSave }: { val: number, onSave: (v: number) => void }) => {
     const [displayVal, setDisplayVal] = useState(decimalToTime(val));
-    useEffect(() => { setDisplayVal(decimalToTime(val)); }, [val]);
-    const handleBlur = () => { onSave(timeToDecimal(displayVal)); setDisplayVal(decimalToTime(timeToDecimal(displayVal))); };
-    return ( <input type="text" value={displayVal} onChange={(e) => setDisplayVal(e.target.value)} onBlur={handleBlur} onKeyDown={(e) => { if(e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} style={{ width: 50, fontSize: 12, textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: 4, padding: '4px', fontWeight: '600', color: '#1e293b', fontFamily:'monospace' }} /> );
+
+    useEffect(() => {
+        setDisplayVal(decimalToTime(val));
+    }, [val]);
+
+    const handleBlur = () => {
+        const decimal = timeToDecimal(displayVal);
+        setDisplayVal(decimalToTime(decimal)); 
+        onSave(decimal); 
+    };
+
+    return (
+        <input 
+            type="text" 
+            value={displayVal}
+            onChange={(e) => setDisplayVal(e.target.value)}
+            onBlur={handleBlur}
+            onKeyDown={(e) => { if(e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+            style={{
+                width: 50, fontSize: 12, textAlign: 'center', 
+                border: '1px solid #cbd5e1', borderRadius: 4, padding: '4px',
+                fontWeight: '600', color: '#1e293b', fontFamily:'monospace'
+            }} 
+        />
+    );
 };
 
 function App() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   
+  // États locaux
   const [year, setYear] = useState(2026);
   const [startDay, setStartDay] = useState(1); 
   const [endDay, setEndDay] = useState(28);
@@ -55,10 +79,12 @@ function App() {
   const [preAssignments, setPreAssignments] = useState<any>({});
   const [planning, setPlanning] = useState<any[]>([]);
   
+  // État pour les contraintes souples (violettes)
   const [softConstraints, setSoftConstraints] = useState<Set<string>>(new Set());
-  const [hideOff, setHideOff] = useState(true); 
-   
-  
+
+  // État pour masquer les OFF dans le planning (TRUE par défaut)
+  const [hideOff, setHideOff] = useState(true); // <--- CORRECTION ICI
+
   // Format : { "1": ["M", "S"] }
   const [optionalCoverage, setOptionalCoverage] = useState<Record<string, string[]>>({});
 
@@ -78,6 +104,7 @@ function App() {
     }
   }, []);
 
+  // --- GESTION CONFIG ---
   const updateConfig = (newConfig: AppConfig) => { setConfig(newConfig); localStorage.setItem('tds_config', JSON.stringify(newConfig)); };
   const handleYearChange = (val: string) => { setYear(parseInt(val) || 2026); updateConfig({ ...config, ANNEE: parseInt(val) || 2026 }); };
   const handleContratChange = (field: keyof typeof config.CONTRAT, val: string) => { updateConfig({ ...config, CONTRAT: { ...config.CONTRAT, [field]: parseInt(val) || 0 } }); };
@@ -121,7 +148,7 @@ function App() {
       if (e.target.files[0]) fr.readAsText(e.target.files[0]);
   };
 
-  // --- GESTION SOFT/HARD ---
+  // --- TOGGLES ---
   const handleToggleSoft = (agent: string, day: number) => {
       const key = `${agent}_${day}`;
       const s = new Set(softConstraints);
@@ -150,9 +177,8 @@ function App() {
       setOptionalCoverage({ ...optionalCoverage, [dayStr]: next });
   };
 
-  // 2. Bascule GLOBALE (Toute la période) - NOUVEAU
+  // 2. Bascule GLOBALE (Toute la période)
   const handleToggleGlobalOptional = (shiftCode: string) => {
-      // Générer la liste de tous les jours
       const daysList = [];
       if (startDay <= endDay) {
           for (let i = startDay; i <= endDay; i++) daysList.push(i.toString());
@@ -161,7 +187,6 @@ function App() {
           for (let i = 1; i <= endDay; i++) daysList.push(i.toString());
       }
 
-      // Vérifier si le shift est déjà optionnel PARTOUT
       const isAlreadyOptionalEverywhere = daysList.every(dayStr => {
           return optionalCoverage[dayStr] && optionalCoverage[dayStr].includes(shiftCode);
       });
@@ -171,10 +196,8 @@ function App() {
       daysList.forEach(dayStr => {
           const currentList = newCoverage[dayStr] || [];
           if (isAlreadyOptionalEverywhere) {
-              // On retire partout (Redevient Rouge/Obligatoire)
               newCoverage[dayStr] = currentList.filter(s => s !== shiftCode);
           } else {
-              // On ajoute partout (Devient Bleu/Optionnel)
               if (!currentList.includes(shiftCode)) {
                   newCoverage[dayStr] = [...currentList, shiftCode];
               }
@@ -213,7 +236,7 @@ function App() {
 
   return (
     <div style={{display: 'flex', flexDirection: 'column', height: '100vh', background: '#f8fafc', fontFamily: 'sans-serif'}}>
-        <header style={{height: 60, background: 'white', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', padding: '0 20px', justifyContent: 'space-between'}}>
+        <header style={{height: 60, background: 'white', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', padding: '0 20px', justifyContent: 'space-between', flexShrink: 0}}>
             <div style={{display:'flex', gap:10, alignItems:'center'}}><span style={{fontSize:20}}>✈️</span> <span style={{fontWeight:'bold'}}>TDS Manager</span></div>
             <div style={{display:'flex', gap:5}}>
                 {['Planning', 'Desiderata', 'Bilan', 'Config'].map(t => (
@@ -247,10 +270,8 @@ function App() {
                             showDesiderataMatch={activeTab === 'planning' ? showDesiderataMatch : false}
                             softConstraints={softConstraints} onToggleSoft={handleToggleSoft}
                             zoomLevel={zoomLevel} hideOff={hideOff}
-                            // Props Couverture Optionnelle
-                            optionalCoverage={optionalCoverage} 
-                            onToggleOptionalCoverage={handleToggleOptionalCoverage}
-                            onToggleGlobalOptional={handleToggleGlobalOptional} // NOUVEAU
+                            optionalCoverage={optionalCoverage} onToggleOptionalCoverage={handleToggleOptionalCoverage}
+                            onToggleGlobalOptional={handleToggleGlobalOptional}
                         />
                     )}
                     {activeTab === 'bilan' && <Bilan planning={planning} config={config} year={year} startDay={startDay} endDay={endDay} />}
@@ -260,7 +281,6 @@ function App() {
 
             {showSidebar && (
                 <div style={{width:320, background:'white', borderLeft:'1px solid #e2e8f0', padding:20, overflowY:'auto'}}>
-                    {/* ... Sidebar inchangée ... */}
                     <div style={sidebarSectionStyle}>
                         <h3 style={{...sidebarTitleStyle, color:'#8b5cf6'}}>💾 SAUVEGARDE CONFIG</h3>
                         <div style={{display:'flex', gap:10}}>
@@ -306,7 +326,7 @@ function App() {
                             <button onClick={handleAddVacation} style={{fontSize:11, padding:'4px 8px', background:'#ecfdf5', color:'#10b981', border:'1px solid #a7f3d0', borderRadius:4, cursor:'pointer', fontWeight:'bold'}}>+ Ajouter</button>
                         </div>
                         {Object.entries(config.VACATIONS).map(([code, horaire]: any) => (
-                            <div key={code} style={{display:'flex', alignItems:'center', gap:5, marginBottom:8, background:'#f8fafc', padding:6, borderRadius:6, border:'1px solid #f1f5f9'}}>
+                            <div key={code} style={{display:'flex', alignItems:'center', gap:5, marginBottom:5, background:'#f8fafc', padding:6, borderRadius:6, border:'1px solid #f1f5f9'}}>
                                 <span style={{fontWeight:'bold', fontSize:12, minWidth:35, textAlign:'center', background:'white', border:'1px solid #e2e8f0', borderRadius:4, padding:'4px 0', color:'#334155'}}>{code}</span>
                                 <TimeInput val={horaire.debut} onSave={(v) => handleChangeVacation(code, 'debut', v)} />
                                 <span style={{color:'#94a3b8', fontSize:10}}>➜</span>
