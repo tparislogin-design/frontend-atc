@@ -16,7 +16,7 @@ import type { AppConfig } from './utils/types';
 const API_URL = "https://ttttty-ty.hf.space/api/optimize"; 
 
 // ==========================================
-// 1. STYLES & CONSTANTES (Définis en PREMIER)
+// 1. STYLES & CONSTANTES
 // ==========================================
 
 const sidebarSectionStyle: React.CSSProperties = { padding: 20, borderBottom: '1px solid #f1f5f9' };
@@ -35,7 +35,8 @@ const DEFAULT_CONFIG: AppConfig = {
   ANNEE: 2026,
   CONTROLEURS: ["GAO", "WBR", "PLC", "CML", "BBD", "LAK", "MZN", "TRT", "CLO", "LNN", "KGR", "FRD", "DAZ", "GNC", "DTY", "JCT"],
   CONTROLLERS_AFFECTES_BUREAU: [],
-  CONTROLLERS_PARITE_STRICTE: [], // Initialisation vide
+  CONTROLLERS_PARITE_STRICTE: [],
+  AGENT_WORK_RATES: {}, // 100% par défaut
   VACATIONS: { 
     "M":  { debut: 5.5, fin: 12.75 },
     "J1": { debut: 7.5, fin: 15.5 },
@@ -55,7 +56,6 @@ const DEFAULT_CONFIG: AppConfig = {
   }
 };
 
-// --- COMPOSANT INTERNE : TIME INPUT ---
 const TimeInput = ({ val, onSave }: { val: number, onSave: (v: number) => void }) => {
     const [displayVal, setDisplayVal] = useState(decimalToTime(val));
     useEffect(() => { setDisplayVal(decimalToTime(val)); }, [val]);
@@ -64,13 +64,12 @@ const TimeInput = ({ val, onSave }: { val: number, onSave: (v: number) => void }
 };
 
 // ==========================================
-// 2. COMPOSANT PRINCIPAL APP
+// 2. COMPOSANT APP
 // ==========================================
 
 function App() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   
-  // États App
   const [year, setYear] = useState(2026);
   const [startDay, setStartDay] = useState(1); 
   const [endDay, setEndDay] = useState(28);
@@ -90,7 +89,7 @@ function App() {
   const [showDesiderataMatch, setShowDesiderataMatch] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
 
-  // États Onglet Config (Cycles)
+  // États Config
   const [selectedAgentConfig, setSelectedAgentConfig] = useState<string>("");
   const [newCycleOr1, setNewCycleOr1] = useState("");
   const [newCycleOr2, setNewCycleOr2] = useState("");
@@ -106,7 +105,6 @@ function App() {
     }
   }, []);
 
-  // --- CONFIG HELPERS ---
   const updateConfig = (newConfig: AppConfig) => { setConfig(newConfig); localStorage.setItem('tds_config', JSON.stringify(newConfig)); };
   const handleYearChange = (val: string) => { setYear(parseInt(val) || 2026); updateConfig({ ...config, ANNEE: parseInt(val) || 2026 }); };
   const handleContratChange = (field: keyof typeof config.CONTRAT, val: string) => { updateConfig({ ...config, CONTRAT: { ...config.CONTRAT, [field]: parseInt(val) || 0 } }); };
@@ -136,25 +134,21 @@ function App() {
       updateConfig({ ...config, CONTROLLERS_AFFECTES_BUREAU: (config.CONTROLLERS_AFFECTES_BUREAU || []).filter(a => a !== agent) });
   };
 
-  // --- GESTION CYCLES ---
+  // --- CYCLES ---
   const handleAddCycle = (type: 'OR' | 'ARGENT') => {
       if (!selectedAgentConfig) return;
       const v1 = type === 'OR' ? newCycleOr1 : newCycleAg1;
       const v2 = type === 'OR' ? newCycleOr2 : newCycleAg2;
-      
       if (!v1 || !v2) return alert("Sélectionnez 2 vacations");
-
+      
       const currentCycles = config.CYCLES || {};
       const agentCycles = currentCycles[selectedAgentConfig] || { OR: [], ARGENT: [] };
       const list = agentCycles[type] || [];
       
-      const exists = list.some((pair: string[]) => pair[0] === v1 && pair[1] === v2);
-      if (exists) return;
+      if (list.some((pair: string[]) => pair[0] === v1 && pair[1] === v2)) return;
 
       const newAgentCycles = { ...agentCycles, [type]: [...list, [v1, v2]] };
-      const newCycles = { ...currentCycles, [selectedAgentConfig]: newAgentCycles };
-      
-      updateConfig({ ...config, CYCLES: newCycles });
+      updateConfig({ ...config, CYCLES: { ...currentCycles, [selectedAgentConfig]: newAgentCycles } });
   };
 
   const handleDeleteCycle = (type: 'OR' | 'ARGENT', idx: number) => {
@@ -162,28 +156,29 @@ function App() {
       const currentCycles = config.CYCLES || {};
       const agentCycles = currentCycles[selectedAgentConfig];
       if (!agentCycles) return;
-
       const list = [...(agentCycles[type] || [])];
       list.splice(idx, 1);
-
-      const newAgentCycles = { ...agentCycles, [type]: list };
-      updateConfig({ ...config, CYCLES: { ...currentCycles, [selectedAgentConfig]: newAgentCycles } });
+      updateConfig({ ...config, CYCLES: { ...currentCycles, [selectedAgentConfig]: { ...agentCycles, [type]: list } } });
   };
 
-  // --- NOUVEAU : HANDLER PARITÉ ---
+  // --- PARITÉ & TAUX ---
   const handleToggleParity = () => {
       if (!selectedAgentConfig) return;
       const currentList = config.CONTROLLERS_PARITE_STRICTE || [];
-      let newList;
-      if (currentList.includes(selectedAgentConfig)) {
-          newList = currentList.filter(a => a !== selectedAgentConfig);
-      } else {
-          newList = [...currentList, selectedAgentConfig];
-      }
+      const newList = currentList.includes(selectedAgentConfig) 
+          ? currentList.filter(a => a !== selectedAgentConfig) 
+          : [...currentList, selectedAgentConfig];
       updateConfig({ ...config, CONTROLLERS_PARITE_STRICTE: newList });
   };
 
-  // --- AUTRES HANDLERS (Export/Import/Misc) ---
+  const handleRateChange = (rate: string) => {
+      if (!selectedAgentConfig) return;
+      const val = parseInt(rate);
+      const newRates = { ...config.AGENT_WORK_RATES, [selectedAgentConfig]: isNaN(val) ? 100 : val };
+      updateConfig({ ...config, AGENT_WORK_RATES: newRates });
+  };
+
+  // --- DATA ---
   const handleExportConfig = () => {
       const data = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
       const a = document.createElement('a'); a.href = data; a.download = `tds_config_${year}.json`; a.click();
@@ -194,19 +189,9 @@ function App() {
           fileReader.readAsText(event.target.files[0], "UTF-8");
           fileReader.onload = (e) => {
               try {
-                  if (e.target?.result) {
-                      const importedConfig = JSON.parse(e.target.result as string);
-                      if (importedConfig.VACATIONS) {
-                          setConfig(importedConfig);
-                          if (importedConfig.ANNEE) setYear(importedConfig.ANNEE);
-                          alert("Configuration chargée avec succès !");
-                      } else {
-                          alert("Erreur : Fichier invalide.");
-                      }
-                  }
-              } catch (err) {
-                  alert("Erreur de lecture du fichier.");
-              }
+                  const c = JSON.parse(e.target?.result as string);
+                  if (c.VACATIONS) { setConfig(c); if(c.ANNEE) setYear(c.ANNEE); alert("OK"); }
+              } catch (err) { alert("Erreur fichier"); }
           };
       }
   };
@@ -229,40 +214,31 @@ function App() {
   const handleToggleOptionalCoverage = (dayNum: number, shiftCode: string) => {
       const dayStr = dayNum.toString();
       const current = optionalCoverage[dayStr] || [];
-      let next;
-      if (current.includes(shiftCode)) next = current.filter(s => s !== shiftCode);
-      else next = [...current, shiftCode];
+      const next = current.includes(shiftCode) ? current.filter(s => s !== shiftCode) : [...current, shiftCode];
       setOptionalCoverage({ ...optionalCoverage, [dayStr]: next });
   };
   const handleToggleGlobalOptional = (shiftCode: string) => {
       const daysList = [];
       if (startDay <= endDay) { for (let i = startDay; i <= endDay; i++) daysList.push(i.toString()); }
       else { for (let i = startDay; i <= 365; i++) daysList.push(i.toString()); for (let i = 1; i <= endDay; i++) daysList.push(i.toString()); }
-      
-      const isAlreadyOptionalEverywhere = daysList.every(dayStr => {
-          return optionalCoverage[dayStr] && optionalCoverage[dayStr].includes(shiftCode);
+      const isAll = daysList.every(d => optionalCoverage[d] && optionalCoverage[d].includes(shiftCode));
+      const newCov = { ...optionalCoverage };
+      daysList.forEach(d => {
+          const cur = newCov[d] || [];
+          if (isAll) newCov[d] = cur.filter(s => s !== shiftCode);
+          else if (!cur.includes(shiftCode)) newCov[d] = [...cur, shiftCode];
       });
-      const newCoverage = { ...optionalCoverage };
-      daysList.forEach(dayStr => {
-          const currentList = newCoverage[dayStr] || [];
-          if (isAlreadyOptionalEverywhere) newCoverage[dayStr] = currentList.filter(s => s !== shiftCode);
-          else if (!currentList.includes(shiftCode)) newCoverage[dayStr] = [...currentList, shiftCode];
-      });
-      setOptionalCoverage(newCoverage);
+      setOptionalCoverage(newCov);
   };
 
-  // --- API HANDLERS (AVEC HANDLE IMPORT RESTAURÉ) ---
   const handleImport = async () => {
     setStatus({type:'loading', msg:'📡 Lecture...'});
     try {
         const data = await parseGoogleSheet(sheetUrl, startDay, endDay); 
-        setPreAssignments(data);
-        setSoftConstraints(new Set()); 
-        setStatus({type:'success', msg: `✅ Import OK (${Object.keys(data).length} agents)`});
+        setPreAssignments(data); setSoftConstraints(new Set()); 
+        setStatus({type:'success', msg: `OK (${Object.keys(data).length} agents)`});
         setActiveTab('desiderata');
-    } catch (e: any) {
-        setStatus({type:'error', msg: `❌ Erreur: ${e.toString()}`});
-    }
+    } catch (e: any) { setStatus({type:'error', msg: `Erreur: ${e.toString()}`}); }
   };
 
   const handleOptimize = async () => {
@@ -282,58 +258,61 @@ function App() {
 
   const gridData = activeTab === 'desiderata' ? convertPreAssignmentsToRows(preAssignments) : planning;
 
-  // --- RENDU CONFIG TAB ---
+  // --- RENDU CONFIG ---
   const renderConfigTab = () => {
       const shifts = Object.keys(config.VACATIONS);
       const agentCycles = (config.CYCLES || {})[selectedAgentConfig] || { OR: [], ARGENT: [] };
-      const isParityEnabled = (config.CONTROLLERS_PARITE_STRICTE || []).includes(selectedAgentConfig);
+      const isParity = (config.CONTROLLERS_PARITE_STRICTE || []).includes(selectedAgentConfig);
+      const rate = (config.AGENT_WORK_RATES && config.AGENT_WORK_RATES[selectedAgentConfig]) || 100;
 
       return (
           <div style={{display:'flex', height:'100%'}}>
-              {/* LISTE GAUCHE */}
               <div style={{width: 200, borderRight:'1px solid #e2e8f0', overflowY:'auto', background:'#f8fafc', padding:10}}>
                   <h4 style={{marginTop:0, color:'#64748b', fontSize:11, textTransform:'uppercase'}}>Agents</h4>
-                  {config.CONTROLEURS.map(c => (
-                      <div 
-                        key={c} 
-                        onClick={() => setSelectedAgentConfig(c)}
-                        style={{
-                            padding:'8px 12px', cursor:'pointer', borderRadius:6, marginBottom:2, fontSize:13, fontWeight:600,
-                            background: selectedAgentConfig === c ? 'white' : 'transparent',
-                            color: selectedAgentConfig === c ? '#2563eb' : '#475569',
-                            boxShadow: selectedAgentConfig === c ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
-                            border: selectedAgentConfig === c ? '1px solid #e2e8f0' : '1px solid transparent'
-                        }}
-                      >
-                          {c}
-                      </div>
-                  ))}
+                  {config.CONTROLEURS.map(c => {
+                      const r = (config.AGENT_WORK_RATES && config.AGENT_WORK_RATES[c]) || 100;
+                      return (
+                          <div key={c} onClick={() => setSelectedAgentConfig(c)} style={{
+                                padding:'8px 12px', cursor:'pointer', borderRadius:6, marginBottom:2, fontSize:13, fontWeight:600,
+                                background: selectedAgentConfig === c ? 'white' : 'transparent',
+                                color: selectedAgentConfig === c ? '#2563eb' : '#475569',
+                                boxShadow: selectedAgentConfig === c ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                                border: selectedAgentConfig === c ? '1px solid #e2e8f0' : '1px solid transparent',
+                                display: 'flex', justifyContent: 'space-between'
+                            }}>
+                              <span>{c}</span>
+                              {r < 100 && <span style={{fontSize:10, background:'#fee2e2', color:'#ef4444', padding:'0 4px', borderRadius:4}}>{r}%</span>}
+                          </div>
+                      );
+                  })}
               </div>
 
-              {/* CONTENU DROITE */}
               <div style={{flex:1, padding:30, overflowY:'auto'}}>
                   {!selectedAgentConfig ? (
-                      <div style={{color:'#94a3b8', textAlign:'center', marginTop:50}}>Sélectionnez un agent à gauche pour configurer ses habitudes.</div>
+                      <div style={{color:'#94a3b8', textAlign:'center', marginTop:50}}>Sélectionnez un agent à gauche.</div>
                   ) : (
                       <div>
-                          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:30}}>
+                          <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:30, borderBottom:'1px solid #e2e8f0', paddingBottom:20}}>
                               <div>
-                                  <h2 style={{margin:0, color:'#1e293b'}}>Cycles & Habitudes : <span style={{color:'#2563eb'}}>{selectedAgentConfig}</span></h2>
-                                  <p style={{fontSize:13, color:'#64748b', margin:0}}>Définissez les enchaînements préférés.</p>
+                                  <h2 style={{margin:0, color:'#1e293b'}}>Config : <span style={{color:'#2563eb'}}>{selectedAgentConfig}</span></h2>
                               </div>
-                              
-                              {/* BOUTON TOGGLE PARITÉ */}
-                              <label style={{display:'flex', alignItems:'center', gap:8, cursor:'pointer', background: isParityEnabled ? '#dcfce7' : '#f1f5f9', padding:'8px 12px', borderRadius:6, border: isParityEnabled ? '1px solid #16a34a' : '1px solid #cbd5e1'}}>
-                                  <input type="checkbox" checked={isParityEnabled} onChange={handleToggleParity} style={{cursor:'pointer'}} />
-                                  <span style={{fontWeight:'bold', fontSize:13, color: isParityEnabled ? '#15803d' : '#475569'}}>
-                                      Parité Stricte (Nb jours Pair)
-                                  </span>
-                              </label>
+                              <div style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:10}}>
+                                  <label style={{display:'flex', alignItems:'center', gap:10, fontSize:13, fontWeight:600, color:'#334155'}}>
+                                      Taux d'activité :
+                                      <div style={{position:'relative'}}>
+                                          <input type="number" min="0" max="100" value={rate} onChange={(e) => handleRateChange(e.target.value)} style={{width:60, padding:'6px', textAlign:'right', borderRadius:6, border:'1px solid #cbd5e1', fontWeight:'bold', color: rate<100 ? '#ef4444':'#16a34a'}} />
+                                          <span style={{position:'absolute', right:20, top:6, color:'#94a3b8', fontSize:11}}>%</span>
+                                      </div>
+                                  </label>
+                                  <label style={{display:'flex', alignItems:'center', gap:8, cursor:'pointer', background: isParity ? '#dcfce7' : '#f1f5f9', padding:'6px 12px', borderRadius:6, border: isParity ? '1px solid #16a34a' : '1px solid #cbd5e1'}}>
+                                      <input type="checkbox" checked={isParity} onChange={handleToggleParity} style={{cursor:'pointer'}} />
+                                      <span style={{fontWeight:'bold', fontSize:12, color: isParity ? '#15803d' : '#475569'}}>Parité Stricte</span>
+                                  </label>
+                              </div>
                           </div>
 
-                          {/* SECTION OR */}
                           <div style={{marginBottom:30, background:'#fffbeb', border:'1px solid #fcd34d', borderRadius:8, padding:20}}>
-                              <h3 style={{marginTop:0, color:'#b45309', fontSize:14}}>🥇 Séquences OR (Priorité Haute)</h3>
+                              <h3 style={{marginTop:0, color:'#b45309', fontSize:14}}>🥇 Séquences OR</h3>
                               <div style={{display:'flex', gap:10, marginBottom:15, alignItems:'center'}}>
                                   <select style={selectStyle} value={newCycleOr1} onChange={e=>setNewCycleOr1(e.target.value)}><option value="">J</option>{shifts.map(s=><option key={s} value={s}>{s}</option>)}</select>
                                   <span>➜</span>
@@ -349,9 +328,8 @@ function App() {
                               </div>
                           </div>
 
-                          {/* SECTION ARGENT */}
                           <div style={{background:'#f8fafc', border:'1px solid #cbd5e1', borderRadius:8, padding:20}}>
-                              <h3 style={{marginTop:0, color:'#475569', fontSize:14}}>🥈 Séquences ARGENT (Priorité Moyenne)</h3>
+                              <h3 style={{marginTop:0, color:'#475569', fontSize:14}}>🥈 Séquences ARGENT</h3>
                               <div style={{display:'flex', gap:10, marginBottom:15, alignItems:'center'}}>
                                   <select style={selectStyle} value={newCycleAg1} onChange={e=>setNewCycleAg1(e.target.value)}><option value="">J</option>{shifts.map(s=><option key={s} value={s}>{s}</option>)}</select>
                                   <span>➜</span>
@@ -447,7 +425,7 @@ function App() {
                     </div>
 
                     <div style={sidebarSectionStyle}>
-                        <h3 style={{...sidebarTitleStyle, color:'#3b82f6'}}>⚙️ PARAMÈTRES GÉNÉRAUX</h3>
+                        <h3 style={sidebarTitleStyle}>⚙️ PARAMÈTRES GÉNÉRAUX</h3>
                         <div style={rowStyle}><label style={labelStyle}>Année</label><input type="number" value={year} onChange={e=>handleYearChange(e.target.value)} style={numberInputStyle}/></div>
                         <div style={rowStyle}><label style={labelStyle}>Jour Début</label><input type="number" value={startDay} onChange={e=>setStartDay(Number(e.target.value))} style={numberInputStyle}/></div>
                         <div style={rowStyle}><label style={labelStyle}>Jour Fin</label><input type="number" value={endDay} onChange={e=>setEndDay(Number(e.target.value))} style={numberInputStyle}/></div>

@@ -31,12 +31,7 @@ const GlobalHeader = (props: any) => {
                     });
                     const color = isOptionalEverywhere ? '#2563eb' : '#ef4444';
                     return (
-                        <span 
-                            key={idx} 
-                            onClick={(e) => { e.stopPropagation(); onToggleGlobalOptional(code); }} 
-                            title="Rendre optionnel/obligatoire pour TOUT le mois" 
-                            style={{ fontSize: 9, color: color, fontWeight: '700', lineHeight: '11px', textAlign:'center', cursor: 'pointer' }}
-                        >
+                        <span key={idx} onClick={(e) => { e.stopPropagation(); onToggleGlobalOptional(code); }} title="Rendre optionnel/obligatoire pour TOUT le mois" style={{ fontSize: 9, color: color, fontWeight: '700', lineHeight: '11px', textAlign:'center', cursor: 'pointer' }}>
                             {code}
                         </span>
                     );
@@ -76,12 +71,7 @@ const CustomHeader = (props: any) => {
                     const isOptional = optionalCoverage && optionalCoverage[dayStr] && optionalCoverage[dayStr].includes(code);
                     const color = isOptional ? '#2563eb' : '#ef4444';
                     return (
-                        <span 
-                            key={idx} 
-                            onClick={(e) => { if (isDesiderataView && onToggleOptionalCoverage) { e.stopPropagation(); onToggleOptionalCoverage(dayNum, code); }}} 
-                            title={isDesiderataView ? "Clic pour rendre optionnel/obligatoire" : ""} 
-                            style={{fontSize: 9, color: color, fontWeight: '700', lineHeight: '11px', textAlign:'center', cursor: isDesiderataView ? 'pointer' : 'default'}}
-                        >
+                        <span key={idx} onClick={(e) => { if (isDesiderataView && onToggleOptionalCoverage) { e.stopPropagation(); onToggleOptionalCoverage(dayNum, code); }}} title={isDesiderataView ? "Clic pour rendre optionnel/obligatoire" : ""} style={{fontSize: 9, color: color, fontWeight: '700', lineHeight: '11px', textAlign:'center', cursor: isDesiderataView ? 'pointer' : 'default'}}>
                             {code}
                         </span>
                     );
@@ -104,7 +94,7 @@ const AgentCellRenderer = (props: any) => {
     };
 
     let worked = 0;
-    let neutralized = 0; 
+    let leaves = 0; // Uniquement C
     let refusedCount = 0;
 
     if (daysList && rowData && config) {
@@ -113,14 +103,13 @@ const AgentCellRenderer = (props: any) => {
             const actualCode = normalize(rowData[dayStr]);
 
             if (actualCode && actualCode !== '' && actualCode !== 'OFF') {
+                // 1. Congés (C)
                 if (actualCode === 'C') {
-                    neutralized++;
+                    leaves++;
                 }
-                else if (config.VACATIONS[actualCode] !== undefined) {
-                    worked++;
-                }
+                // 2. Travail (Vacation ou Stage)
                 else {
-                    neutralized++;
+                    worked++;
                 }
             }
 
@@ -135,9 +124,14 @@ const AgentCellRenderer = (props: any) => {
     }
 
     const totalDays = daysList ? daysList.length : 0;
-    const target = Math.ceil((totalDays - neutralized) / 2);
     
-    // Utilisation explicite des variables pour éviter l'erreur "declared but never read"
+    // Récupération Taux
+    const workRate = (config?.AGENT_WORK_RATES && config.AGENT_WORK_RATES[agentName]) || 100;
+    
+    // NOUVELLE FORMULE : Taux * (Total - Congés) / 2
+    // On ne déduit plus les stages de la cible, car les stages sont comptés comme "worked" (travail effectif)
+    const target = Math.ceil((workRate / 100) * (totalDays - leaves) / 2);
+    
     const statsColor = worked >= (target - 1) ? '#16a34a' : '#ea580c';
     const isBureau = (config?.CONTROLLERS_AFFECTES_BUREAU || []).includes(agentName);
     const nameStyle = { fontWeight: '800', fontSize: 13, color: isBureau ? '#2563eb' : '#334155' };
@@ -145,20 +139,15 @@ const AgentCellRenderer = (props: any) => {
     return (
         <div style={{display:'flex', flexDirection:'column', justifyContent:'center', height:'100%', paddingLeft: 8}}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <span style={nameStyle}>{agentName} {isBureau && '🏢'}</span>
+                <span style={nameStyle}>
+                    {agentName} 
+                    {isBureau && ' 🏢'}
+                    {workRate < 100 && <span style={{fontSize:10, color:'#ef4444', marginLeft:4}}>{workRate}%</span>}
+                </span>
             </div>
             <div style={{display:'flex', alignItems:'center', gap: 8, marginTop: 2}}>
-                <div style={{fontSize: 10, color: statsColor, fontWeight: 700}}>
-                    {worked} <span style={{color:'#cbd5e1', fontWeight:400}}>/</span> {target}
-                </div>
-                {refusedCount > 0 && ( 
-                    <div 
-                        title={`${refusedCount} demande(s) non respectée(s)`} 
-                        style={{fontSize: 9, color: '#ef4444', fontWeight: '800', background: '#fee2e2', padding: '1px 4px', borderRadius: '4px', border: '1px solid #fca5a5'}}
-                    >
-                        {refusedCount} ⚠️
-                    </div> 
-                )}
+                <div style={{fontSize: 10, color: statsColor, fontWeight: 700}}>{worked} <span style={{color:'#cbd5e1', fontWeight:400}}>/</span> {target}</div>
+                {refusedCount > 0 && ( <div title={`${refusedCount} demande(s) non respectée(s)`} style={{fontSize: 9, color: '#ef4444', fontWeight: '800', background: '#fee2e2', padding: '1px 4px', borderRadius: '4px', border: '1px solid #fca5a5'}}>{refusedCount} ⚠️</div> )}
             </div>
         </div>
     );
@@ -190,7 +179,6 @@ const ShiftCellRenderer = (props: any) => {
 
     const hasRequest = allowedCodes.length > 0;
     const isMatch = hasRequest && allowedCodes.includes(displayVal);
-    
     const cellKey = `${agentName}_${dayNum}`;
     const isSoft = softConstraints && softConstraints.has(cellKey);
 
@@ -284,7 +272,7 @@ const ShiftCellRenderer = (props: any) => {
     );
 };
 
-// --- 5. COMPOSANT PRINCIPAL ---
+// --- 5. MAIN ---
 interface PlanningTableProps {
   data: any[];
   year: number;
@@ -364,7 +352,6 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
   }, [year, startDay, endDay, isDesiderataView, daysList, config, optionalCoverage]);
 
   return (
-    // Style en ligne sécurisé avec template literal pour éviter les erreurs de chaîne
     <div className="ag-theme-balham" style={{ height: '100%', width: '100%', zoom: `${zoomLevel}%` }}>
       <style>{`.ag-theme-balham .ag-header-cell { padding: 0 !important; } .ag-theme-balham .ag-header-cell-label { width: 100%; height: 100%; padding: 0; } .ag-theme-balham .ag-root-wrapper { border: 1px solid #94a3b8; } .ag-theme-balham .ag-header { border-bottom: 2px solid #cbd5e1; background-color: white; } .ag-theme-balham .ag-row { border-bottom-color: #cbd5e1; } .ag-theme-balham .ag-pinned-left-header { border-right: 2px solid #cbd5e1; } .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; } .ag-theme-balham .weekend-header { background-color: #e5e7eb !important; border-bottom: 1px solid #cbd5e1; }`}</style>
       <AgGridReact 

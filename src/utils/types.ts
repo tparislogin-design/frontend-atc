@@ -2,7 +2,8 @@ export interface AppConfig {
   ANNEE: number;
   CONTROLEURS: string[];
   CONTROLLERS_AFFECTES_BUREAU?: string[];
-  CONTROLLERS_PARITE_STRICTE?: string[]; // <--- NOUVEAU
+  CONTROLLERS_PARITE_STRICTE?: string[];
+  AGENT_WORK_RATES?: { [agentName: string]: number }; // NOUVEAU
   VACATIONS: {
     [code: string]: {
       debut: number;
