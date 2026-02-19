@@ -14,7 +14,7 @@ const safeString = (val: any): string => {
     return String(val);
 };
 
-// --- 1. HEADER RÉSUMÉ (BADGES COMPACTS) ---
+// --- 1. HEADER RÉSUMÉ (MANQUANTS GLOBAUX - COMPACT) ---
 const SummaryHeader = (props: any) => {
     const { api, config, context } = props;
     const { daysList } = context; 
@@ -42,12 +42,20 @@ const SummaryHeader = (props: any) => {
         });
     }
 
-    // Cas Planning Vide
+    // Bordures explicites pour fermer la grille
+    const boxStyle: React.CSSProperties = {
+        display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', 
+        width:'100%', height:'100%', padding: '4px', background:'#fff', 
+        borderRight:'1px solid #bdc3c7', // Démarcation colonne
+        borderBottom:'1px solid #bdc3c7', // Démarcation ligne
+        boxSizing: 'border-box'
+    };
+
     if (!hasAnyData) {
         return (
-            <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:'100%', height:'100%', background:'#fff', borderRight:'2px solid #cbd5e1', borderBottom:'2px solid #cbd5e1'}}>
+            <div style={boxStyle}>
                 <div style={{fontSize: 10, fontWeight: '800', color: '#94a3b8'}}>PLANNING</div>
-                <div style={{fontSize: 14, marginTop: 2}}>⚪</div>
+                <div style={{fontSize: 16, marginTop: 2}}>⚪</div>
             </div>
         );
     }
@@ -61,23 +69,15 @@ const SummaryHeader = (props: any) => {
         });
 
     return (
-        <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:'100%', height:'100%', padding: '4px', background:'#fff', borderRight:'2px solid #cbd5e1', borderBottom:'2px solid #cbd5e1', boxSizing:'border-box'}}>
-            <div style={{fontSize: 9, fontWeight: '800', color: '#64748b', marginBottom: 6, textTransform:'uppercase'}}>MANQUANTS</div>
-            
-            {summary.length === 0 ? (
-                <div style={{fontSize: 20}}>✅</div>
-            ) : (
-                // MODE BADGES (Flex Wrap)
-                <div style={{display:'flex', flexWrap:'wrap', gap: 4, justifyContent:'center', width:'100%', overflowY:'auto'}}>
-                    {summary.map(([shift, count]) => (
-                        <div key={shift} style={{
-                            display:'flex', alignItems:'center', gap:3,
-                            background:'#fee2e2', border:'1px solid #fecaca', 
-                            padding:'2px 6px', borderRadius: '10px'
-                        }}>
-                            <span style={{fontSize: 10, fontWeight:'800', color:'#dc2626'}}>{count}</span>
-                            <span style={{fontSize: 9, fontWeight:'700', color:'#4b5563'}}>{shift}</span>
-                        </div>
+        <div style={boxStyle}>
+            <div style={{fontSize: 9, fontWeight: '800', color: '#64748b', marginBottom: 4, textTransform:'uppercase'}}>MANQUANTS</div>
+            {summary.length === 0 ? <div style={{fontSize: 20}}>✅</div> : (
+                <div style={{textAlign:'center', lineHeight:'1.2', fontSize: 10, fontWeight:'600', color:'#ef4444'}}>
+                    {/* Affichage compact : 3xM, 2xJ1 */}
+                    {summary.map(([shift, count], idx) => (
+                        <span key={shift}>
+                            <span style={{fontWeight:'800'}}>{count}</span>x{shift}{idx < summary.length - 1 ? ', ' : ''}
+                        </span>
                     ))}
                 </div>
             )}
@@ -85,7 +85,7 @@ const SummaryHeader = (props: any) => {
     );
 };
 
-// --- 2. HEADER GLOBAL (DÉSIDÉRATA) ---
+// --- 2. HEADER GLOBAL (Vue Désidérata) ---
 const GlobalHeader = (props: any) => {
     const { config, context } = props;
     const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
@@ -98,10 +98,17 @@ const GlobalHeader = (props: any) => {
     });
     
     return (
-        <div style={{display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', paddingTop: 6, background: '#f1f5f9', borderRight:'2px solid #cbd5e1', borderBottom:'2px solid #cbd5e1'}}>
+        <div style={{
+            display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', paddingTop: 6, 
+            background: '#f1f5f9', 
+            borderRight:'1px solid #bdc3c7', 
+            borderBottom:'1px solid #bdc3c7',
+            boxSizing: 'border-box'
+        }}>
             <div style={{fontSize: 10, fontWeight: '800', color: '#64748b', textTransform:'uppercase'}}>GLOBAL</div>
             <div style={{fontSize: 9, color: '#94a3b8', fontStyle:'italic', marginBottom: 4}}>1-Clic</div>
-            <div style={{display:'flex', flexDirection:'column', gap: 1, overflowY: 'auto', width: '100%', maxHeight: '100px', paddingBottom: 4}}>
+            
+            <div style={{display:'flex', flexDirection:'column', gap: 1, overflowY: 'hidden', width: '100%', paddingBottom: 4}}>
                 {allShifts.map((code: string, idx: number) => {
                     let isOptionalEverywhere = false;
                     if (daysList && Array.isArray(daysList)) {
@@ -112,7 +119,11 @@ const GlobalHeader = (props: any) => {
                     const color = isOptionalEverywhere ? '#2563eb' : '#ef4444';
                     return (
                         <div key={idx} style={{display:'flex', justifyContent:'center'}}>
-                            <span onClick={(e) => { e.stopPropagation(); onToggleGlobalOptional(code); }} title={`Rendre ${code} optionnel/obligatoire pour TOUT le mois`} style={{ fontSize: 10, color: color, fontWeight: '700', cursor: 'pointer', padding: '1px 4px' }}>
+                            <span 
+                                onClick={(e) => { e.stopPropagation(); onToggleGlobalOptional(code); }} 
+                                title={`Rendre ${code} optionnel/obligatoire pour TOUT le mois`} 
+                                style={{ fontSize: 10, color: color, fontWeight: '700', cursor: 'pointer', padding: '0 4px' }}
+                            >
                                 {code}
                             </span>
                         </div>
@@ -123,7 +134,7 @@ const GlobalHeader = (props: any) => {
     );
 };
 
-// --- 3. HEADER QUOTIDIEN (COMPACT & VISUEL) ---
+// --- 3. HEADER QUOTIDIEN (COMPACT & LINÉAIRE) ---
 const CustomHeader = (props: any) => {
     const { displayName, dayNum, fullDate, api, config, context } = props;
     const { optionalCoverage, onToggleOptionalCoverage, isDesiderataView } = context || {};
@@ -142,57 +153,67 @@ const CustomHeader = (props: any) => {
         return a.localeCompare(b);
     });
 
-    // Détermination de la couleur de la bordure du bas
-    let borderColor = 'transparent'; // Par défaut
+    // Détermination de la couleur de la barre indicatrice du bas
+    let indicatorColor = 'transparent'; 
+
     if (missingShifts.length > 0) {
-        // S'il y a des manquants, on regarde s'ils sont tous optionnels
         const dayStr = safeString(dayNum);
         const areAllOptional = missingShifts.every(code => optionalCoverage && optionalCoverage[dayStr]?.includes(code));
-        borderColor = areAllOptional ? '#2563eb' : '#ef4444'; // Bleu si tout optionnel, Rouge si critique
+        indicatorColor = areAllOptional ? '#2563eb' : '#ef4444'; // Bleu ou Rouge
     }
 
     return (
         <div style={{
             display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', 
             paddingTop: 4, paddingBottom: 2, boxSizing:'border-box',
-            borderBottom: `3px solid ${borderColor}`, // Indicateur visuel fort
-            background: missingShifts.length > 0 ? '#fff' : '#f0fdf4' // Fond vert très clair si OK
+            borderRight: '1px solid #bdc3c7', 
+            borderBottom: `1px solid #bdc3c7`, // Gris fixe
+            background: missingShifts.length > 0 ? '#fff' : '#f0fdf4',
+            position: 'relative'
         }}>
-            {/* BLOC DATE COMPACT */}
-            <div style={{lineHeight: '1.1', textAlign:'center', marginBottom: 4}}>
+            {/* Date */}
+            <div style={{lineHeight: '1.1', textAlign:'center', marginBottom: 2}}>
                 <div style={{fontSize: 9, fontWeight: '700', color: '#64748b', textTransform:'uppercase'}}>{displayName ? displayName.substring(0, 2) : ''}</div>
                 <div style={{fontSize: 12, fontWeight: '800', color: '#1e293b'}}>{dayNum}</div>
                 <div style={{fontSize: 9, color: '#94a3b8'}}>{fullDate}</div>
             </div>
 
-            {/* LISTE MANQUANTS COMPACTE */}
-            <div style={{display:'flex', flexDirection:'column', gap: 0, marginTop: 'auto', width:'100%'}}>
+            {/* Liste Manquants */}
+            <div style={{
+                textAlign:'center', width:'100%', padding: '0 2px', 
+                whiteSpace: 'normal', lineHeight: '1.1'
+            }}>
                 {missingShifts.map((code: string, idx: number) => {
                     const dayStr = safeString(dayNum);
                     const isOptional = optionalCoverage && optionalCoverage[dayStr] && optionalCoverage[dayStr].includes(code);
                     const color = isOptional ? '#2563eb' : '#ef4444';
+                    
                     return (
-                        <div key={idx} style={{textAlign:'center', lineHeight:'10px'}}>
-                            <span 
-                                onClick={(e) => { 
-                                    if (isDesiderataView && onToggleOptionalCoverage) { 
-                                        e.stopPropagation(); 
-                                        onToggleOptionalCoverage(dayNum, code); 
-                                    }
-                                }} 
-                                title={isDesiderataView ? "Clic pour rendre optionnel" : ""} 
-                                style={{
-                                    fontSize: 9, color: color, fontWeight: '700', 
-                                    cursor: isDesiderataView ? 'pointer' : 'default',
-                                    display: 'block'
-                                }}
-                            >
-                                {code}
-                            </span>
-                        </div>
+                        <span 
+                            key={code}
+                            onClick={(e) => { 
+                                if (isDesiderataView && onToggleOptionalCoverage) { 
+                                    e.stopPropagation(); 
+                                    onToggleOptionalCoverage(dayNum, code); 
+                                }
+                            }}
+                            title={isDesiderataView ? "Clic pour rendre optionnel" : ""}
+                            style={{
+                                fontSize: 10, fontWeight: '700', color: color,
+                                cursor: isDesiderataView ? 'pointer' : 'default'
+                            }}
+                        >
+                            {code}{idx < missingShifts.length - 1 ? ', ' : ''}
+                        </span>
                     );
                 })}
             </div>
+
+            {/* Barre de couleur indicatrice */}
+            <div style={{
+                position: 'absolute', bottom: 0, left: 0, right: 0, 
+                height: '3px', backgroundColor: indicatorColor 
+            }} />
         </div>
     );
 };
@@ -294,10 +315,15 @@ const ShiftCellRenderer = (props: any) => {
         case 'A2': style = { color: '#dc2626', bg: '#fee2e2', border: '#fecaca' }; break;
         case 'S': style = { color: '#9333ea', bg: '#f3e8ff', border: '#d8b4fe' }; break;
         case 'C': style = { color: '#db2777', bg: '#fce7f3', border: '#fbcfe8' }; break;
+        
         case 'OFF': 
-            if (!isDesiderataView && hideOff) style = { color: 'transparent', bg: 'transparent', border: 'transparent' };
-            else style = { color: '#000000', bg: 'transparent', border: 'transparent' }; 
+            if (!isDesiderataView && hideOff) {
+                style = { color: 'transparent', bg: 'transparent', border: 'transparent' };
+            } else {
+                style = { color: '#000000', bg: 'transparent', border: 'transparent' }; 
+            }
             break;
+
         case 'FSAU':
         case 'FH': style = { color: '#b45309', bg: '#fef3c7', border: '#fde68a' }; break;
         case 'B': style = { color: '#475569', bg: '#ffffff', border: '#e2e8f0' }; break;
@@ -382,9 +408,14 @@ const PlanningTable: React.FC<any> = (props) => {
     <div className="ag-theme-balham" style={{ height: '100%', width: '100%', zoom: `${props.zoomLevel}%` }}>
       <style>{`.ag-theme-balham .ag-header-cell { padding: 0 !important; } .ag-theme-balham .ag-header-cell-label { width: 100%; height: 100%; padding: 0; } .ag-theme-balham .ag-root-wrapper { border: 1px solid #94a3b8; } .ag-theme-balham .ag-header { border-bottom: 2px solid #cbd5e1; background-color: white; } .ag-theme-balham .ag-row { border-bottom-color: #cbd5e1; } .ag-theme-balham .ag-pinned-left-header { border-right: 2px solid #cbd5e1; } .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; } .ag-theme-balham .weekend-header { background-color: #e5e7eb !important; border-bottom: 1px solid #cbd5e1; }`}</style>
       <AgGridReact 
-        rowData={data || []} columnDefs={columnDefs} components={components} theme="legacy" context={gridContext}
+        rowData={data || []} 
+        columnDefs={columnDefs} 
+        components={components} 
+        theme="legacy"
+        context={gridContext}
         defaultColDef={{ resizable: true, sortable: false, filter: false, suppressHeaderMenuButton: true }} 
-        headerHeight={110} rowHeight={50}     
+        headerHeight={110} 
+        rowHeight={50}     
       />
     </div>
   );
