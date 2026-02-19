@@ -14,8 +14,9 @@ const safeString = (val: any): string => {
     return String(val);
 };
 
-// --- 1. HEADER RÉSUMÉ (Vue Planning - Manquants) ---
+// --- 1. HEADER RÉSUMÉ (Vue Planning) ---
 const SummaryHeader = (props: any) => {
+    // On récupère le contexte passé via headerComponentParams
     const { api, config, context } = props;
     const { daysList } = context; 
     
@@ -42,7 +43,6 @@ const SummaryHeader = (props: any) => {
         });
     }
 
-    // Si le planning est vide (ex: démarrage ou import désidérata seul), pas d'alerte
     if (!hasAnyData) {
         return (
             <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:'100%', height:'100%', padding: '4px 0', background:'#fff', borderRight:'2px solid #cbd5e1', borderBottom:'2px solid #cbd5e1'}}>
@@ -77,7 +77,7 @@ const SummaryHeader = (props: any) => {
     );
 };
 
-// --- 2. HEADER GLOBAL (Vue Désidérata - Contrôles) ---
+// --- 2. HEADER GLOBAL (Vue Désidérata) ---
 const GlobalHeader = (props: any) => {
     const { config, context } = props;
     const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
@@ -94,9 +94,15 @@ const GlobalHeader = (props: any) => {
             <div style={{fontSize: 10, fontWeight: '800', color: '#64748b', textTransform:'uppercase'}}>GLOBAL (1-Clic)</div>
             <div style={{display:'flex', flexWrap:'wrap', justifyContent:'center', gap: 4, marginTop: 'auto', paddingBottom: 6, width: '100%'}}>
                 {allShifts.map((code: string, idx: number) => {
-                    const isOptionalEverywhere = daysList.every((d: number) => {
-                        return optionalCoverage && optionalCoverage[d.toString()] && optionalCoverage[d.toString()].includes(code);
-                    });
+                    
+                    // Sécurisation : on vérifie que daysList existe
+                    let isOptionalEverywhere = false;
+                    if (daysList && Array.isArray(daysList)) {
+                        isOptionalEverywhere = daysList.every((d: number) => {
+                            return optionalCoverage && optionalCoverage[d.toString()] && optionalCoverage[d.toString()].includes(code);
+                        });
+                    }
+
                     const color = isOptionalEverywhere ? '#2563eb' : '#ef4444';
                     return (
                         <span 
@@ -219,6 +225,7 @@ const ShiftCellRenderer = (props: any) => {
     };
 
     const displayVal = normalize(rawVal);
+    
     if (displayVal === '') return null;
 
     const dayStr = safeString(dayNum);
@@ -235,7 +242,10 @@ const ShiftCellRenderer = (props: any) => {
 
     const getBorderStyle = () => {
         if (isDesiderataView) return isSoft ? '2px solid #9333ea' : '1px solid #cbd5e1';
-        if (showDesiderataMatch && hasRequest) return isMatch ? '2px solid #16a34a' : '2px solid #ef4444';
+        if (showDesiderataMatch && hasRequest) {
+            if (isMatch) return '2px solid #16a34a'; 
+            return '2px solid #ef4444'; 
+        }
         return `1px solid ${style.border}`;
     };
 
@@ -286,8 +296,34 @@ const ShiftCellRenderer = (props: any) => {
     const isPurple = finalBorder.includes('#9333ea');
 
     return (
-        <div onContextMenu={handleContextMenu} title={tooltip} style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', width: '100%', cursor: isDesiderataView ? 'context-menu' : 'default'}}>
-            <span style={{backgroundColor: style.bg, color: style.color, border: finalBorder, borderRadius: '6px', padding: (isRed || isGreen || isPurple) ? '1px 0' : '2px 0', fontSize: '10px', fontWeight: '700', width: '34px', textAlign: 'center', boxShadow: isRed ? '0 0 4px rgba(239, 68, 68, 0.5)' : (isGreen ? '0 0 4px rgba(22, 163, 74, 0.5)' : (isPurple ? '0 0 4px rgba(147, 51, 234, 0.5)' : 'none')), display: 'inline-block', transform: (isRed || isGreen || isPurple) ? 'scale(1.05)' : 'scale(1)', transition: 'all 0.1s'}}>
+        <div 
+            onContextMenu={handleContextMenu}
+            title={tooltip}
+            style={{
+                display: 'flex', justifyContent: 'center', alignItems: 'center', 
+                height: '100%', width: '100%', 
+                cursor: isDesiderataView ? 'context-menu' : 'default'
+            }}
+        >
+            <span style={{
+                backgroundColor: style.bg, 
+                color: style.color, 
+                border: finalBorder,
+                borderRadius: '6px', 
+                padding: (isRed || isGreen || isPurple) ? '1px 0' : '2px 0', 
+                fontSize: '10px', 
+                fontWeight: '700',
+                width: '34px',
+                textAlign: 'center', 
+                boxShadow: isRed 
+                    ? '0 0 4px rgba(239, 68, 68, 0.5)' 
+                    : (isGreen 
+                        ? '0 0 4px rgba(22, 163, 74, 0.5)'
+                        : (isPurple ? '0 0 4px rgba(147, 51, 234, 0.5)' : 'none')),
+                display: 'inline-block',
+                transform: (isRed || isGreen || isPurple) ? 'scale(1.05)' : 'scale(1)',
+                transition: 'all 0.1s'
+            }}>
                 {displayVal}
             </span>
         </div>
@@ -313,21 +349,28 @@ const PlanningTable: React.FC<any> = (props) => {
     return list;
   }, [startDay, endDay]);
 
+  // CONSTRUCTION DU CONTEXTE GLOBAL POUR AG GRID
+  // C'est ici qu'on résout le problème : on passe daysList explicitement dans le contexte
+  const gridContext = {
+      ...props, // Contient config, fonctions, etc.
+      daysList  // Contient la liste des jours calculée
+  };
+
   const columnDefs = useMemo<ColDef[]>(() => {
     const cols: ColDef[] = [{ 
         field: 'Agent', 
         headerName: 'AGENT', 
-        // LOGIQUE HEADER COIN : Global en mode Desiderata, Summary en mode Planning
+        // HEADER conditionnel : Summary si Planning, Global si Désidérata
         headerComponent: isDesiderataView ? 'agColumnHeaderGlobal' : 'agColumnHeaderSummary',
-        // On passe bien le contexte pour que GlobalHeader ait les fonctions
-        headerComponentParams: { config, context: props },
+        // IMPORTANT : On passe le contexte via params pour être sûr
+        headerComponentParams: { config, context: gridContext },
         pinned: 'left', 
         width: 140, 
         cellRenderer: 'agentCellRenderer', 
         cellStyle: { backgroundColor: '#f8fafc', borderRight: '2px solid #cbd5e1', display:'flex', alignItems:'center', padding:0 } 
     }];
     
-    // PLUS DE COLONNE SÉPARÉE 'GLOBAL', ELLE EST INTÉGRÉE DANS 'AGENT'
+    // PLUS DE COLONNE SÉPARÉE
 
     daysList.forEach(dayNum => {
       const dayStr = safeString(dayNum);
@@ -340,14 +383,15 @@ const PlanningTable: React.FC<any> = (props) => {
       cols.push({
         field: dayStr, width: 52, headerClass: isWeekend ? 'weekend-header' : '',
         headerComponent: 'dayColumnHeader',
-        headerComponentParams: { displayName: date.toLocaleDateString('fr-FR', { weekday: 'short' }), dayNum: dayNum, fullDate: dateStr, config: config, context: props },
+        // On passe aussi le contexte complet ici
+        headerComponentParams: { displayName: date.toLocaleDateString('fr-FR', { weekday: 'short' }), dayNum: dayNum, fullDate: dateStr, config: config, context: gridContext },
         cellRenderer: 'shiftCellRenderer',
         cellStyle: { display: 'flex', justifyContent: 'center', alignItems: 'center', borderRight: '1px solid #cbd5e1', padding: 0, backgroundColor: isWeekend ? '#e5e7eb' : 'white' },
         editable: false 
       });
     });
     return cols; 
-  }, [year, startDay, endDay, isDesiderataView, daysList, config, props]);
+  }, [year, startDay, endDay, isDesiderataView, daysList, config, gridContext]);
 
   return (
     <div className="ag-theme-balham" style={{ height: '100%', width: '100%', zoom: `${props.zoomLevel}%` }}>
@@ -357,7 +401,7 @@ const PlanningTable: React.FC<any> = (props) => {
         columnDefs={columnDefs} 
         components={components} 
         theme="legacy"
-        context={props}
+        context={gridContext} // On passe le contexte enrichi
         defaultColDef={{ resizable: true, sortable: false, filter: false, suppressHeaderMenuButton: true }} 
         headerHeight={140} 
         rowHeight={50}     
