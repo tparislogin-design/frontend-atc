@@ -14,7 +14,70 @@ const safeString = (val: any): string => {
     return String(val);
 };
 
-// --- 1. HEADER GLOBAL ---
+// --- 1. HEADER RÉSUMÉ (MANQUANTS GLOBAUX - Coin haut gauche) ---
+const SummaryHeader = (props: any) => {
+    const { api, config, context } = props;
+    const { daysList } = context; 
+    
+    // On récupère les vacations configurées
+    const targetShifts = config && config.VACATIONS ? Object.keys(config.VACATIONS) : ['M', 'J1', 'J3'];
+    
+    // Initialisation compteurs
+    const missingCounts: Record<string, number> = {};
+    targetShifts.forEach((s: string) => missingCounts[s] = 0);
+
+    // Calcul si l'API est disponible
+    if (api && daysList) {
+        daysList.forEach((dayNum: number) => {
+            const dayStr = safeString(dayNum);
+            const presentOnDay = new Set<string>();
+            
+            // On scanne la colonne du jour
+            api.forEachNode((node: any) => {
+                const val = node.data ? node.data[dayStr] : null;
+                // On considère qu'un agent est "présent" s'il a une valeur qui n'est pas OFF/C/Vide
+                if (val && !['OFF', 'C', '', 'O'].includes(val)) {
+                    presentOnDay.add(val);
+                }
+            });
+
+            // On vérifie quelles vacations manquent ce jour-là
+            targetShifts.forEach((shift: string) => {
+                if (!presentOnDay.has(shift)) {
+                    missingCounts[shift]++;
+                }
+            });
+        });
+    }
+
+    // Préparation affichage (trié par nombre décroissant)
+    const summary = Object.entries(missingCounts)
+        .filter(([_, count]) => count > 0)
+        .sort((a, b) => b[1] - a[1]);
+
+    return (
+        <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:'100%', height:'100%', padding: '4px 0', background:'#fff', borderBottom:'2px solid #cbd5e1'}}>
+            <div style={{fontSize: 10, fontWeight: '800', color: '#334155', marginBottom: 4}}>MANQUANTS</div>
+            
+            {summary.length === 0 ? (
+                // Si tout est couvert
+                <div style={{fontSize: 16}}>✅</div>
+            ) : (
+                // Liste des manquants
+                <div style={{display:'flex', flexDirection:'column', gap: 0, overflowY:'auto', width:'100%', maxHeight:'100px'}}>
+                    {summary.map(([shift, count]) => (
+                        <div key={shift} style={{display:'flex', justifyContent:'center', gap:4}}>
+                            <span style={{fontSize: 11, fontWeight:'800', color:'#ef4444'}}>{count}</span>
+                            <span style={{fontSize: 10, fontWeight:'600', color:'#64748b'}}>{shift}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// --- 2. HEADER GLOBAL (1-CLIC POUR DÉSIDÉRATA) ---
 const GlobalHeader = (props: any) => {
     const { config, context } = props;
     const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
@@ -41,19 +104,21 @@ const GlobalHeader = (props: any) => {
     );
 };
 
-// --- 2. HEADER QUOTIDIEN ---
+// --- 3. HEADER QUOTIDIEN (JOURS) ---
 const CustomHeader = (props: any) => {
     const { displayName, dayNum, fullDate, api, config, context } = props;
     const { optionalCoverage, onToggleOptionalCoverage, isDesiderataView } = context || {};
 
     const targetShifts = config && config.VACATIONS ? Object.keys(config.VACATIONS) : ['M', 'J1', 'J3']; 
     const presentShifts = new Set<string>();
+    
     if (api) {
         api.forEachNode((node: any) => {
             const val = node.data ? node.data[dayNum] : null;
             if (val && !['OFF','C','','O'].includes(val)) presentShifts.add(val);
         });
     }
+    
     const missingShifts = targetShifts.filter((code: string) => !presentShifts.has(code));
     missingShifts.sort((a: string, b: string) => {
         if (config && config.VACATIONS[a] && config.VACATIONS[b]) return config.VACATIONS[a].debut - config.VACATIONS[b].debut;
@@ -71,7 +136,17 @@ const CustomHeader = (props: any) => {
                     const isOptional = optionalCoverage && optionalCoverage[dayStr] && optionalCoverage[dayStr].includes(code);
                     const color = isOptional ? '#2563eb' : '#ef4444';
                     return (
-                        <span key={idx} onClick={(e) => { if (isDesiderataView && onToggleOptionalCoverage) { e.stopPropagation(); onToggleOptionalCoverage(dayNum, code); }}} title={isDesiderataView ? "Clic pour rendre optionnel/obligatoire" : ""} style={{fontSize: 9, color: color, fontWeight: '700', lineHeight: '11px', textAlign:'center', cursor: isDesiderataView ? 'pointer' : 'default'}}>
+                        <span 
+                            key={idx} 
+                            onClick={(e) => { 
+                                if (isDesiderataView && onToggleOptionalCoverage) { 
+                                    e.stopPropagation(); 
+                                    onToggleOptionalCoverage(dayNum, code); 
+                                }
+                            }} 
+                            title={isDesiderataView ? "Clic pour rendre optionnel/obligatoire" : ""} 
+                            style={{fontSize: 9, color: color, fontWeight: '700', lineHeight: '11px', textAlign:'center', cursor: isDesiderataView ? 'pointer' : 'default'}}
+                        >
                             {code}
                         </span>
                     );
@@ -81,7 +156,7 @@ const CustomHeader = (props: any) => {
     );
 };
 
-// --- 3. AGENT CELL ---
+// --- 4. AGENT CELL (NOM + STATS) ---
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
     const rowData = props.data;
@@ -93,7 +168,7 @@ const AgentCellRenderer = (props: any) => {
         return s;
     };
 
-    let worked = 0;
+    let worked = 0; 
     let leaves = 0; // Uniquement C
     let refusedCount = 0;
 
@@ -103,12 +178,10 @@ const AgentCellRenderer = (props: any) => {
             const actualCode = normalize(rowData[dayStr]);
 
             if (actualCode && actualCode !== '' && actualCode !== 'OFF') {
-                // 1. Congés (C)
                 if (actualCode === 'C') {
                     leaves++;
-                }
-                // 2. Travail (Vacation ou Stage)
-                else {
+                } else {
+                    // Toute autre occupation (M, S, Stage...) compte comme travail effectué
                     worked++;
                 }
             }
@@ -125,11 +198,8 @@ const AgentCellRenderer = (props: any) => {
 
     const totalDays = daysList ? daysList.length : 0;
     
-    // Récupération Taux
+    // Calcul Cible avec Taux
     const workRate = (config?.AGENT_WORK_RATES && config.AGENT_WORK_RATES[agentName]) || 100;
-    
-    // NOUVELLE FORMULE : Taux * (Total - Congés) / 2
-    // On ne déduit plus les stages de la cible, car les stages sont comptés comme "worked" (travail effectif)
     const target = Math.ceil((workRate / 100) * (totalDays - leaves) / 2);
     
     const statsColor = worked >= (target - 1) ? '#16a34a' : '#ea580c';
@@ -146,14 +216,20 @@ const AgentCellRenderer = (props: any) => {
                 </span>
             </div>
             <div style={{display:'flex', alignItems:'center', gap: 8, marginTop: 2}}>
-                <div style={{fontSize: 10, color: statsColor, fontWeight: 700}}>{worked} <span style={{color:'#cbd5e1', fontWeight:400}}>/</span> {target}</div>
-                {refusedCount > 0 && ( <div title={`${refusedCount} demande(s) non respectée(s)`} style={{fontSize: 9, color: '#ef4444', fontWeight: '800', background: '#fee2e2', padding: '1px 4px', borderRadius: '4px', border: '1px solid #fca5a5'}}>{refusedCount} ⚠️</div> )}
+                <div style={{fontSize: 10, color: statsColor, fontWeight: 700}}>
+                    {worked} <span style={{color:'#cbd5e1', fontWeight:400}}>/</span> {target}
+                </div>
+                {refusedCount > 0 && ( 
+                    <div title={`${refusedCount} demande(s) non respectée(s)`} style={{fontSize: 9, color: '#ef4444', fontWeight: '800', background: '#fee2e2', padding: '1px 4px', borderRadius: '4px', border: '1px solid #fca5a5'}}>
+                        {refusedCount} ⚠️
+                    </div> 
+                )}
             </div>
         </div>
     );
 };
 
-// --- 4. SHIFT CELL ---
+// --- 5. SHIFT CELL (CELLULE PRINCIPALE) ---
 const ShiftCellRenderer = (props: any) => {
     const rawVal = props.value;
     const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView, hideOff } = props.context || {};
@@ -168,8 +244,10 @@ const ShiftCellRenderer = (props: any) => {
 
     const displayVal = normalize(rawVal);
     
+    // Si vide (avant calcul), on ne rend rien
     if (displayVal === '') return null;
 
+    // Analyse Demande
     const dayStr = safeString(dayNum);
     const rawRequest = preAssignments && preAssignments[agentName] ? preAssignments[agentName][dayStr] : '';
     let allowedCodes: string[] = [];
@@ -179,9 +257,11 @@ const ShiftCellRenderer = (props: any) => {
 
     const hasRequest = allowedCodes.length > 0;
     const isMatch = hasRequest && allowedCodes.includes(displayVal);
+    
     const cellKey = `${agentName}_${dayNum}`;
     const isSoft = softConstraints && softConstraints.has(cellKey);
 
+    // BORDURES
     const getBorderStyle = () => {
         if (isDesiderataView) return isSoft ? '2px solid #9333ea' : '1px solid #cbd5e1';
         if (showDesiderataMatch && hasRequest) {
@@ -191,6 +271,7 @@ const ShiftCellRenderer = (props: any) => {
         return `1px solid ${style.border}`;
     };
 
+    // STYLES
     let style = { color: '#334155', bg: '#f1f5f9', border: '#cbd5e1' }; 
     const styleKey = displayVal; 
 
@@ -206,8 +287,11 @@ const ShiftCellRenderer = (props: any) => {
         
         case 'OFF': 
             if (!isDesiderataView && hideOff) {
+                // Masqué : Transparent partout (Texte + Fond)
+                // Cela laisse voir la couleur de fond de la grille (ex: gris pour le weekend)
                 style = { color: 'transparent', bg: 'transparent', border: 'transparent' };
             } else {
+                // Visible : Texte Noir, Fond Transparent
                 style = { color: '#000000', bg: 'transparent', border: 'transparent' }; 
             }
             break;
@@ -257,6 +341,7 @@ const ShiftCellRenderer = (props: any) => {
                 fontWeight: '700',
                 width: '34px',
                 textAlign: 'center', 
+                // Ombre pour mettre en valeur les matchs/mismatches
                 boxShadow: isRed 
                     ? '0 0 4px rgba(239, 68, 68, 0.5)' 
                     : (isGreen 
@@ -272,7 +357,7 @@ const ShiftCellRenderer = (props: any) => {
     );
 };
 
-// --- 5. MAIN ---
+// --- 6. COMPOSANT PRINCIPAL ---
 interface PlanningTableProps {
   data: any[];
   year: number;
@@ -306,8 +391,9 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
 }) => {
 
   const components = useMemo(() => ({
-      agColumnHeader: CustomHeader,
-      agColumnHeaderGlobal: GlobalHeader,
+      agColumnHeaderSummary: SummaryHeader, // HEADER COIN GAUCHE
+      agColumnHeaderGlobal: GlobalHeader,   // HEADER COLONNE GLOBAL
+      dayColumnHeader: CustomHeader,        // HEADER JOUR CLASSIQUE
       agentCellRenderer: AgentCellRenderer,
       shiftCellRenderer: ShiftCellRenderer
   }), []);
@@ -320,8 +406,17 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
   }, [startDay, endDay]);
 
   const columnDefs = useMemo<ColDef[]>(() => {
-    const cols: ColDef[] = [{ field: 'Agent', headerName: 'CONTRÔLEUR', pinned: 'left', width: 140, cellRenderer: 'agentCellRenderer', cellStyle: { backgroundColor: '#f8fafc', borderRight: '2px solid #cbd5e1', display:'flex', alignItems:'center', padding:0 } }];
+    const cols: ColDef[] = [{ 
+        field: 'Agent', 
+        headerName: 'AGENT', 
+        headerComponent: 'agColumnHeaderSummary', // Utilisation du Summary Header
+        pinned: 'left', 
+        width: 140, 
+        cellRenderer: 'agentCellRenderer', 
+        cellStyle: { backgroundColor: '#f8fafc', borderRight: '2px solid #cbd5e1', display:'flex', alignItems:'center', padding:0 } 
+    }];
     
+    // Colonne Global visible uniquement en mode Désidérata
     if (isDesiderataView) {
         cols.push({
             field: 'Global', headerName: 'GLOBAL', pinned: 'left', width: 50,
@@ -342,7 +437,8 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
 
       cols.push({
         field: dayStr, width: 52, headerClass: isWeekend ? 'weekend-header' : '',
-        headerComponentParams: { displayName: date.toLocaleDateString('fr-FR', { weekday: 'short' }), dayNum: dayNum, fullDate: dateStr, config: config, context: { optionalCoverage, onToggleOptionalCoverage, isDesiderataView } },
+        headerComponent: 'dayColumnHeader',
+        headerComponentParams: { displayName: date.toLocaleDateString('fr-FR', { weekday: 'short' }), dayNum: dayNum, fullDate: dateStr, config: config, context: { optionalCoverage, onToggleOptionalCoverage, isDesiderataView, daysList } },
         cellRenderer: 'shiftCellRenderer',
         cellStyle: { display: 'flex', justifyContent: 'center', alignItems: 'center', borderRight: '1px solid #cbd5e1', padding: 0, backgroundColor: isWeekend ? '#e5e7eb' : 'white' },
         editable: false 
