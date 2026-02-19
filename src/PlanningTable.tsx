@@ -14,12 +14,11 @@ const safeString = (val: any): string => {
     return String(val);
 };
 
-// --- 1. HEADER GLOBAL (Vue Désidérata - LISTE COMPLÈTE) ---
+// --- 1. HEADER GLOBAL (Vue Désidérata) ---
 const GlobalHeader = (props: any) => {
     const { config, context } = props;
     const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
     
-    // Récupération de TOUTES les vacations
     const allShifts = config && config.VACATIONS ? Object.keys(config.VACATIONS) : ['M', 'J1', 'J3'];
     
     // Tri chronologique
@@ -40,12 +39,10 @@ const GlobalHeader = (props: any) => {
             <div style={{fontSize: 10, fontWeight: '800', color: '#64748b', textTransform:'uppercase', flexShrink: 0}}>GLOBAL</div>
             <div style={{fontSize: 9, color: '#94a3b8', fontStyle:'italic', marginBottom: 4, flexShrink: 0}}>1-Clic</div>
             
-            {/* CORRECTION ICI : flex: 1 et overflowY: auto pour voir toute la liste */}
+            {/* CORRECTION ICI : Plus d'ascenseur (overflow), hauteur automatique */}
             <div style={{
-                display:'flex', flexDirection:'column', gap: 1, 
-                overflowY: 'auto', // Permet le scroll si la liste est longue
+                display:'flex', flexDirection:'column', gap: 2, 
                 width: '100%', 
-                flex: 1, // Prend tout l'espace restant en hauteur
                 paddingBottom: 4
             }}>
                 {allShifts.map((code: string, idx: number) => {
@@ -57,7 +54,7 @@ const GlobalHeader = (props: any) => {
                     }
                     const color = isOptionalEverywhere ? '#2563eb' : '#ef4444';
                     return (
-                        <div key={idx} style={{display:'flex', justifyContent:'center', minHeight: '12px'}}>
+                        <div key={idx} style={{display:'flex', justifyContent:'center'}}>
                             <span 
                                 onClick={(e) => { e.stopPropagation(); onToggleGlobalOptional(code); }} 
                                 title={`Rendre ${code} optionnel/obligatoire pour TOUT le mois`} 
@@ -73,7 +70,7 @@ const GlobalHeader = (props: any) => {
     );
 };
 
-// --- 2. HEADER RÉSUMÉ (Vue Planning - MANQUANTS) ---
+// --- 2. HEADER RÉSUMÉ (Vue Planning) ---
 const SummaryHeader = (props: any) => {
     const { api, config, context } = props;
     const { daysList } = context; 
@@ -88,15 +85,19 @@ const SummaryHeader = (props: any) => {
         daysList.forEach((dayNum: number) => {
             const dayStr = safeString(dayNum);
             const presentOnDay = new Set<string>();
+            
             api.forEachNode((node: any) => {
                 const val = node.data ? node.data[dayStr] : null;
                 if (val && !['OFF', 'C', '', 'O'].includes(val)) {
                     presentOnDay.add(val);
-                    hasAnyData = true;
+                    hasAnyData = true; 
                 }
             });
+
             targetShifts.forEach((shift: string) => {
-                if (!presentOnDay.has(shift)) missingCounts[shift]++;
+                if (!presentOnDay.has(shift)) {
+                    missingCounts[shift]++;
+                }
             });
         });
     }
@@ -130,7 +131,10 @@ const SummaryHeader = (props: any) => {
     return (
         <div style={boxStyle}>
             <div style={{fontSize: 9, fontWeight: '800', color: '#64748b', marginBottom: 4, textTransform:'uppercase'}}>MANQUANTS</div>
-            {summary.length === 0 ? <div style={{fontSize: 20}}>✅</div> : (
+            
+            {summary.length === 0 ? (
+                <div style={{fontSize: 20}}>✅</div>
+            ) : (
                 <div style={{textAlign:'center', lineHeight:'1.2', fontSize: 10, fontWeight:'600', color:'#ef4444', overflowY:'auto', maxHeight:'80px', width:'100%'}}>
                     {summary.map(([shift, count], idx) => (
                         <span key={shift}>
@@ -143,7 +147,7 @@ const SummaryHeader = (props: any) => {
     );
 };
 
-// --- 3. HEADER QUOTIDIEN (COMPACT & LINÉAIRE) ---
+// --- 3. HEADER QUOTIDIEN (Jours) ---
 const CustomHeader = (props: any) => {
     const { displayName, dayNum, fullDate, api, config, context } = props;
     const { optionalCoverage, onToggleOptionalCoverage, isDesiderataView } = context || {};
@@ -375,6 +379,13 @@ const PlanningTable: React.FC<any> = (props) => {
 
   const gridContext = { ...props, daysList };
 
+  // CALCUL DYNAMIQUE DE LA HAUTEUR DU HEADER
+  const vacationCount = config && config.VACATIONS ? Object.keys(config.VACATIONS).length : 6;
+  // Hauteur de base (Titre+Sous-titre) + (Nombre Vacations * Hauteur ligne)
+  const calculatedHeaderHeight = 45 + (vacationCount * 14); 
+  // En mode Planning, on reste compact (110). En mode Désidérata, on s'adapte au contenu.
+  const headerHeight = isDesiderataView ? Math.max(110, calculatedHeaderHeight) : 110;
+
   const columnDefs = useMemo<ColDef[]>(() => {
     const cols: ColDef[] = [{ 
         field: 'Agent', headerName: 'AGENT', 
@@ -407,9 +418,14 @@ const PlanningTable: React.FC<any> = (props) => {
     <div className="ag-theme-balham" style={{ height: '100%', width: '100%', zoom: `${props.zoomLevel}%` }}>
       <style>{`.ag-theme-balham .ag-header-cell { padding: 0 !important; } .ag-theme-balham .ag-header-cell-label { width: 100%; height: 100%; padding: 0; } .ag-theme-balham .ag-root-wrapper { border: 1px solid #94a3b8; } .ag-theme-balham .ag-header { border-bottom: 2px solid #cbd5e1; background-color: white; } .ag-theme-balham .ag-row { border-bottom-color: #cbd5e1; } .ag-theme-balham .ag-pinned-left-header { border-right: 2px solid #cbd5e1; } .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; } .ag-theme-balham .weekend-header { background-color: #e5e7eb !important; border-bottom: 1px solid #cbd5e1; }`}</style>
       <AgGridReact 
-        rowData={data || []} columnDefs={columnDefs} components={components} theme="legacy" context={gridContext}
+        rowData={data || []} 
+        columnDefs={columnDefs} 
+        components={components} 
+        theme="legacy"
+        context={gridContext}
         defaultColDef={{ resizable: true, sortable: false, filter: false, suppressHeaderMenuButton: true }} 
-        headerHeight={110} rowHeight={50}     
+        headerHeight={headerHeight} 
+        rowHeight={50}     
       />
     </div>
   );
