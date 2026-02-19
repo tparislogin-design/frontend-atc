@@ -14,11 +14,12 @@ const safeString = (val: any): string => {
     return String(val);
 };
 
-// --- 1. HEADER GLOBAL (Vue Désidérata) ---
+// --- 1. HEADER GLOBAL (Vue Désidérata - 2 COLONNES) ---
 const GlobalHeader = (props: any) => {
     const { config, context } = props;
     const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
     
+    // Récupération de TOUTES les vacations
     const allShifts = config && config.VACATIONS ? Object.keys(config.VACATIONS) : ['M', 'J1', 'J3'];
     
     // Tri chronologique
@@ -39,11 +40,17 @@ const GlobalHeader = (props: any) => {
             <div style={{fontSize: 10, fontWeight: '800', color: '#64748b', textTransform:'uppercase', flexShrink: 0}}>GLOBAL</div>
             <div style={{fontSize: 9, color: '#94a3b8', fontStyle:'italic', marginBottom: 4, flexShrink: 0}}>1-Clic</div>
             
-            {/* CORRECTION ICI : Plus d'ascenseur (overflow), hauteur automatique */}
+            {/* CORRECTION ICI : Affichage en GRILLE 2 COLONNES */}
             <div style={{
-                display:'flex', flexDirection:'column', gap: 2, 
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr', // 2 colonnes égales
+                columnGap: '2px', // Espacement horizontal
+                rowGap: '2px',    // Espacement vertical
                 width: '100%', 
-                paddingBottom: 4
+                padding: '0 4px',
+                boxSizing: 'border-box',
+                paddingBottom: 4,
+                overflowY: 'auto'
             }}>
                 {allShifts.map((code: string, idx: number) => {
                     let isOptionalEverywhere = false;
@@ -54,11 +61,17 @@ const GlobalHeader = (props: any) => {
                     }
                     const color = isOptionalEverywhere ? '#2563eb' : '#ef4444';
                     return (
-                        <div key={idx} style={{display:'flex', justifyContent:'center'}}>
+                        <div key={idx} style={{display:'flex', justifyContent:'center', alignItems:'center'}}>
                             <span 
                                 onClick={(e) => { e.stopPropagation(); onToggleGlobalOptional(code); }} 
                                 title={`Rendre ${code} optionnel/obligatoire pour TOUT le mois`} 
-                                style={{ fontSize: 10, color: color, fontWeight: '700', cursor: 'pointer', padding: '1px 4px' }}
+                                style={{ 
+                                    fontSize: 10, color: color, fontWeight: '700', 
+                                    cursor: 'pointer', padding: '2px 4px',
+                                    border: '1px solid #e2e8f0', borderRadius: '4px', // Petit cadre pour bien distinguer
+                                    backgroundColor: '#fff',
+                                    width: '100%', textAlign: 'center'
+                                }}
                             >
                                 {code}
                             </span>
@@ -102,7 +115,6 @@ const SummaryHeader = (props: any) => {
         });
     }
 
-    // Bordures explicites
     const boxStyle: React.CSSProperties = {
         display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', 
         width:'100%', height:'100%', padding: '4px', background:'#fff', 
@@ -379,11 +391,10 @@ const PlanningTable: React.FC<any> = (props) => {
 
   const gridContext = { ...props, daysList };
 
-  // CALCUL DYNAMIQUE DE LA HAUTEUR DU HEADER
+  // CALCUL DYNAMIQUE HAUTEUR HEADER (Ajusté pour 2 colonnes)
   const vacationCount = config && config.VACATIONS ? Object.keys(config.VACATIONS).length : 6;
-  // Hauteur de base (Titre+Sous-titre) + (Nombre Vacations * Hauteur ligne)
-  const calculatedHeaderHeight = 45 + (vacationCount * 14); 
-  // En mode Planning, on reste compact (110). En mode Désidérata, on s'adapte au contenu.
+  // Hauteur de base + (Nombre lignes * hauteur) - Divisé par 2 colonnes
+  const calculatedHeaderHeight = 45 + (Math.ceil(vacationCount / 2) * 20); 
   const headerHeight = isDesiderataView ? Math.max(110, calculatedHeaderHeight) : 110;
 
   const columnDefs = useMemo<ColDef[]>(() => {
