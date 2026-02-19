@@ -26,6 +26,9 @@ const SummaryHeader = (props: any) => {
     const missingCounts: Record<string, number> = {};
     targetShifts.forEach((s: string) => missingCounts[s] = 0);
 
+    // Variable pour savoir si le planning contient des données
+    let hasAnyData = false;
+
     // Calcul si l'API est disponible
     if (api && daysList) {
         daysList.forEach((dayNum: number) => {
@@ -38,6 +41,7 @@ const SummaryHeader = (props: any) => {
                 // On considère qu'un agent est "présent" s'il a une valeur qui n'est pas OFF/C/Vide
                 if (val && !['OFF', 'C', '', 'O'].includes(val)) {
                     presentOnDay.add(val);
+                    hasAnyData = true; // Le planning n'est pas vide
                 }
             });
 
@@ -50,9 +54,17 @@ const SummaryHeader = (props: any) => {
         });
     }
 
-    // Préparation affichage
-    // 1. Filtrer ceux qui ont des manquants (> 0)
-    // 2. TRIER PAR ORDRE HORAIRE (debut) et non par nombre
+    // --- Si le planning est vide, on affiche un état neutre ---
+    if (!hasAnyData) {
+        return (
+            <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:'100%', height:'100%', padding: '4px 0', background:'#fff', borderBottom:'2px solid #cbd5e1'}}>
+                <div style={{fontSize: 10, fontWeight: '800', color: '#94a3b8'}}>PLANNING</div>
+                <div style={{fontSize: 16, marginTop: 2}}>⚪</div>
+            </div>
+        );
+    }
+
+    // Préparation affichage (trié par ordre horaire)
     const summary = Object.entries(missingCounts)
         .filter(([_, count]) => count > 0)
         .sort((a, b) => {
@@ -60,7 +72,7 @@ const SummaryHeader = (props: any) => {
             const codeB = b[0];
             const startA = config?.VACATIONS[codeA]?.debut || 0;
             const startB = config?.VACATIONS[codeB]?.debut || 0;
-            return startA - startB; // Tri croissant des heures
+            return startA - startB;
         });
 
     return (
@@ -71,7 +83,7 @@ const SummaryHeader = (props: any) => {
                 // Si tout est couvert
                 <div style={{fontSize: 16}}>✅</div>
             ) : (
-                // Liste des manquants classée par heure
+                // Liste des manquants
                 <div style={{display:'flex', flexDirection:'column', gap: 0, overflowY:'auto', width:'100%', maxHeight:'100px'}}>
                     {summary.map(([shift, count]) => (
                         <div key={shift} style={{display:'flex', justifyContent:'center', gap:4}}>
@@ -277,8 +289,8 @@ const ShiftCellRenderer = (props: any) => {
     const getBorderStyle = () => {
         if (isDesiderataView) return isSoft ? '2px solid #9333ea' : '1px solid #cbd5e1';
         if (showDesiderataMatch && hasRequest) {
-            if (isMatch) return '2px solid #16a34a'; 
-            return '2px solid #ef4444'; 
+            if (isMatch) return '2px solid #16a34a'; // Vert
+            return '2px solid #ef4444'; // Rouge
         }
         return `1px solid ${style.border}`;
     };
@@ -298,8 +310,10 @@ const ShiftCellRenderer = (props: any) => {
         
         case 'OFF': 
             if (!isDesiderataView && hideOff) {
+                // Masqué : Transparent partout
                 style = { color: 'transparent', bg: 'transparent', border: 'transparent' };
             } else {
+                // Visible : Texte Noir, Fond Transparent (pour week-end)
                 style = { color: '#000000', bg: 'transparent', border: 'transparent' }; 
             }
             break;
@@ -398,9 +412,9 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
 }) => {
 
   const components = useMemo(() => ({
-      agColumnHeaderSummary: SummaryHeader, // HEADER COIN GAUCHE
-      agColumnHeaderGlobal: GlobalHeader,   // HEADER COLONNE GLOBAL
-      dayColumnHeader: CustomHeader,        // HEADER JOUR CLASSIQUE
+      agColumnHeaderSummary: SummaryHeader, 
+      agColumnHeaderGlobal: GlobalHeader,   
+      dayColumnHeader: CustomHeader,        
       agentCellRenderer: AgentCellRenderer,
       shiftCellRenderer: ShiftCellRenderer
   }), []);
@@ -416,14 +430,13 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
     const cols: ColDef[] = [{ 
         field: 'Agent', 
         headerName: 'AGENT', 
-        headerComponent: 'agColumnHeaderSummary', // Utilisation du Summary Header
+        headerComponent: 'agColumnHeaderSummary',
         pinned: 'left', 
         width: 140, 
         cellRenderer: 'agentCellRenderer', 
         cellStyle: { backgroundColor: '#f8fafc', borderRight: '2px solid #cbd5e1', display:'flex', alignItems:'center', padding:0 } 
     }];
     
-    // Colonne Global visible uniquement en mode Désidérata
     if (isDesiderataView) {
         cols.push({
             field: 'Global', headerName: 'GLOBAL', pinned: 'left', width: 50,
@@ -444,7 +457,6 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
 
       cols.push({
         field: dayStr, width: 52, headerClass: isWeekend ? 'weekend-header' : '',
-        // UTILISATION DU HEADER JOURNALIER ICI
         headerComponent: 'dayColumnHeader',
         headerComponentParams: { displayName: date.toLocaleDateString('fr-FR', { weekday: 'short' }), dayNum: dayNum, fullDate: dateStr, config: config, context: { optionalCoverage, onToggleOptionalCoverage, isDesiderataView, daysList } },
         cellRenderer: 'shiftCellRenderer',
