@@ -14,7 +14,66 @@ const safeString = (val: any): string => {
     return String(val);
 };
 
-// --- 1. HEADER RÉSUMÉ (MANQUANTS GLOBAUX - COMPACT) ---
+// --- 1. HEADER GLOBAL (Vue Désidérata - LISTE COMPLÈTE) ---
+const GlobalHeader = (props: any) => {
+    const { config, context } = props;
+    const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
+    
+    // Récupération de TOUTES les vacations
+    const allShifts = config && config.VACATIONS ? Object.keys(config.VACATIONS) : ['M', 'J1', 'J3'];
+    
+    // Tri chronologique
+    allShifts.sort((a: string, b: string) => {
+        const startA = config?.VACATIONS[a]?.debut || 0;
+        const startB = config?.VACATIONS[b]?.debut || 0;
+        return startA - startB;
+    });
+    
+    return (
+        <div style={{
+            display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', 
+            paddingTop: 6, background: '#f1f5f9', 
+            borderRight:'1px solid #cbd5e1', 
+            borderBottom:'1px solid #cbd5e1',
+            boxSizing: 'border-box'
+        }}>
+            <div style={{fontSize: 10, fontWeight: '800', color: '#64748b', textTransform:'uppercase', flexShrink: 0}}>GLOBAL</div>
+            <div style={{fontSize: 9, color: '#94a3b8', fontStyle:'italic', marginBottom: 4, flexShrink: 0}}>1-Clic</div>
+            
+            {/* CORRECTION ICI : flex: 1 et overflowY: auto pour voir toute la liste */}
+            <div style={{
+                display:'flex', flexDirection:'column', gap: 1, 
+                overflowY: 'auto', // Permet le scroll si la liste est longue
+                width: '100%', 
+                flex: 1, // Prend tout l'espace restant en hauteur
+                paddingBottom: 4
+            }}>
+                {allShifts.map((code: string, idx: number) => {
+                    let isOptionalEverywhere = false;
+                    if (daysList && Array.isArray(daysList)) {
+                        isOptionalEverywhere = daysList.every((d: number) => {
+                            return optionalCoverage && optionalCoverage[d.toString()] && optionalCoverage[d.toString()].includes(code);
+                        });
+                    }
+                    const color = isOptionalEverywhere ? '#2563eb' : '#ef4444';
+                    return (
+                        <div key={idx} style={{display:'flex', justifyContent:'center', minHeight: '12px'}}>
+                            <span 
+                                onClick={(e) => { e.stopPropagation(); onToggleGlobalOptional(code); }} 
+                                title={`Rendre ${code} optionnel/obligatoire pour TOUT le mois`} 
+                                style={{ fontSize: 10, color: color, fontWeight: '700', cursor: 'pointer', padding: '1px 4px' }}
+                            >
+                                {code}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+// --- 2. HEADER RÉSUMÉ (Vue Planning - MANQUANTS) ---
 const SummaryHeader = (props: any) => {
     const { api, config, context } = props;
     const { daysList } = context; 
@@ -42,12 +101,12 @@ const SummaryHeader = (props: any) => {
         });
     }
 
-    // Bordures explicites pour fermer la grille
+    // Bordures explicites
     const boxStyle: React.CSSProperties = {
         display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', 
         width:'100%', height:'100%', padding: '4px', background:'#fff', 
-        borderRight:'1px solid #bdc3c7', // Démarcation colonne
-        borderBottom:'1px solid #bdc3c7', // Démarcation ligne
+        borderRight:'1px solid #bdc3c7', 
+        borderBottom:'1px solid #bdc3c7', 
         boxSizing: 'border-box'
     };
 
@@ -72,8 +131,7 @@ const SummaryHeader = (props: any) => {
         <div style={boxStyle}>
             <div style={{fontSize: 9, fontWeight: '800', color: '#64748b', marginBottom: 4, textTransform:'uppercase'}}>MANQUANTS</div>
             {summary.length === 0 ? <div style={{fontSize: 20}}>✅</div> : (
-                <div style={{textAlign:'center', lineHeight:'1.2', fontSize: 10, fontWeight:'600', color:'#ef4444'}}>
-                    {/* Affichage compact : 3xM, 2xJ1 */}
+                <div style={{textAlign:'center', lineHeight:'1.2', fontSize: 10, fontWeight:'600', color:'#ef4444', overflowY:'auto', maxHeight:'80px', width:'100%'}}>
                     {summary.map(([shift, count], idx) => (
                         <span key={shift}>
                             <span style={{fontWeight:'800'}}>{count}</span>x{shift}{idx < summary.length - 1 ? ', ' : ''}
@@ -81,55 +139,6 @@ const SummaryHeader = (props: any) => {
                     ))}
                 </div>
             )}
-        </div>
-    );
-};
-
-// --- 2. HEADER GLOBAL (Vue Désidérata) ---
-const GlobalHeader = (props: any) => {
-    const { config, context } = props;
-    const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
-    
-    const allShifts = config && config.VACATIONS ? Object.keys(config.VACATIONS) : ['M', 'J1', 'J3'];
-    allShifts.sort((a: string, b: string) => {
-        const startA = config?.VACATIONS[a]?.debut || 0;
-        const startB = config?.VACATIONS[b]?.debut || 0;
-        return startA - startB;
-    });
-    
-    return (
-        <div style={{
-            display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', paddingTop: 6, 
-            background: '#f1f5f9', 
-            borderRight:'1px solid #bdc3c7', 
-            borderBottom:'1px solid #bdc3c7',
-            boxSizing: 'border-box'
-        }}>
-            <div style={{fontSize: 10, fontWeight: '800', color: '#64748b', textTransform:'uppercase'}}>GLOBAL</div>
-            <div style={{fontSize: 9, color: '#94a3b8', fontStyle:'italic', marginBottom: 4}}>1-Clic</div>
-            
-            <div style={{display:'flex', flexDirection:'column', gap: 1, overflowY: 'hidden', width: '100%', paddingBottom: 4}}>
-                {allShifts.map((code: string, idx: number) => {
-                    let isOptionalEverywhere = false;
-                    if (daysList && Array.isArray(daysList)) {
-                        isOptionalEverywhere = daysList.every((d: number) => {
-                            return optionalCoverage && optionalCoverage[d.toString()] && optionalCoverage[d.toString()].includes(code);
-                        });
-                    }
-                    const color = isOptionalEverywhere ? '#2563eb' : '#ef4444';
-                    return (
-                        <div key={idx} style={{display:'flex', justifyContent:'center'}}>
-                            <span 
-                                onClick={(e) => { e.stopPropagation(); onToggleGlobalOptional(code); }} 
-                                title={`Rendre ${code} optionnel/obligatoire pour TOUT le mois`} 
-                                style={{ fontSize: 10, color: color, fontWeight: '700', cursor: 'pointer', padding: '0 4px' }}
-                            >
-                                {code}
-                            </span>
-                        </div>
-                    );
-                })}
-            </div>
         </div>
     );
 };
@@ -153,13 +162,11 @@ const CustomHeader = (props: any) => {
         return a.localeCompare(b);
     });
 
-    // Détermination de la couleur de la barre indicatrice du bas
     let indicatorColor = 'transparent'; 
-
     if (missingShifts.length > 0) {
         const dayStr = safeString(dayNum);
         const areAllOptional = missingShifts.every(code => optionalCoverage && optionalCoverage[dayStr]?.includes(code));
-        indicatorColor = areAllOptional ? '#2563eb' : '#ef4444'; // Bleu ou Rouge
+        indicatorColor = areAllOptional ? '#2563eb' : '#ef4444'; 
     }
 
     return (
@@ -167,27 +174,24 @@ const CustomHeader = (props: any) => {
             display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', 
             paddingTop: 4, paddingBottom: 2, boxSizing:'border-box',
             borderRight: '1px solid #bdc3c7', 
-            borderBottom: `1px solid #bdc3c7`, // Gris fixe
+            borderBottom: `1px solid #bdc3c7`, 
             background: missingShifts.length > 0 ? '#fff' : '#f0fdf4',
             position: 'relative'
         }}>
-            {/* Date */}
             <div style={{lineHeight: '1.1', textAlign:'center', marginBottom: 2}}>
                 <div style={{fontSize: 9, fontWeight: '700', color: '#64748b', textTransform:'uppercase'}}>{displayName ? displayName.substring(0, 2) : ''}</div>
                 <div style={{fontSize: 12, fontWeight: '800', color: '#1e293b'}}>{dayNum}</div>
                 <div style={{fontSize: 9, color: '#94a3b8'}}>{fullDate}</div>
             </div>
 
-            {/* Liste Manquants */}
             <div style={{
                 textAlign:'center', width:'100%', padding: '0 2px', 
-                whiteSpace: 'normal', lineHeight: '1.1'
+                whiteSpace: 'normal', lineHeight: '1.1', overflowY:'hidden'
             }}>
                 {missingShifts.map((code: string, idx: number) => {
                     const dayStr = safeString(dayNum);
                     const isOptional = optionalCoverage && optionalCoverage[dayStr] && optionalCoverage[dayStr].includes(code);
                     const color = isOptional ? '#2563eb' : '#ef4444';
-                    
                     return (
                         <span 
                             key={code}
@@ -208,12 +212,7 @@ const CustomHeader = (props: any) => {
                     );
                 })}
             </div>
-
-            {/* Barre de couleur indicatrice */}
-            <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0, 
-                height: '3px', backgroundColor: indicatorColor 
-            }} />
+            <div style={{position: 'absolute', bottom: 0, left: 0, right: 0, height: '3px', backgroundColor: indicatorColor}} />
         </div>
     );
 };
@@ -408,14 +407,9 @@ const PlanningTable: React.FC<any> = (props) => {
     <div className="ag-theme-balham" style={{ height: '100%', width: '100%', zoom: `${props.zoomLevel}%` }}>
       <style>{`.ag-theme-balham .ag-header-cell { padding: 0 !important; } .ag-theme-balham .ag-header-cell-label { width: 100%; height: 100%; padding: 0; } .ag-theme-balham .ag-root-wrapper { border: 1px solid #94a3b8; } .ag-theme-balham .ag-header { border-bottom: 2px solid #cbd5e1; background-color: white; } .ag-theme-balham .ag-row { border-bottom-color: #cbd5e1; } .ag-theme-balham .ag-pinned-left-header { border-right: 2px solid #cbd5e1; } .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; } .ag-theme-balham .weekend-header { background-color: #e5e7eb !important; border-bottom: 1px solid #cbd5e1; }`}</style>
       <AgGridReact 
-        rowData={data || []} 
-        columnDefs={columnDefs} 
-        components={components} 
-        theme="legacy"
-        context={gridContext}
+        rowData={data || []} columnDefs={columnDefs} components={components} theme="legacy" context={gridContext}
         defaultColDef={{ resizable: true, sortable: false, filter: false, suppressHeaderMenuButton: true }} 
-        headerHeight={110} 
-        rowHeight={50}     
+        headerHeight={110} rowHeight={50}     
       />
     </div>
   );
