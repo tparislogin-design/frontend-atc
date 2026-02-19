@@ -36,7 +36,7 @@ const DEFAULT_CONFIG: AppConfig = {
   CONTROLEURS: ["GAO", "WBR", "PLC", "CML", "BBD", "LAK", "MZN", "TRT", "CLO", "LNN", "KGR", "FRD", "DAZ", "GNC", "DTY", "JCT"],
   CONTROLLERS_AFFECTES_BUREAU: [],
   CONTROLLERS_PARITE_STRICTE: [],
-  AGENT_WORK_RATES: {}, // 100% par défaut
+  AGENT_WORK_RATES: {},
   VACATIONS: { 
     "M":  { debut: 5.5, fin: 12.75 },
     "J1": { debut: 7.5, fin: 15.5 },
@@ -56,6 +56,7 @@ const DEFAULT_CONFIG: AppConfig = {
   }
 };
 
+// --- COMPOSANT INTERNE : TIME INPUT ---
 const TimeInput = ({ val, onSave }: { val: number, onSave: (v: number) => void }) => {
     const [displayVal, setDisplayVal] = useState(decimalToTime(val));
     useEffect(() => { setDisplayVal(decimalToTime(val)); }, [val]);
@@ -425,7 +426,7 @@ function App() {
                     </div>
 
                     <div style={sidebarSectionStyle}>
-                        <h3 style={sidebarTitleStyle}>⚙️ PARAMÈTRES GÉNÉRAUX</h3>
+                        <h3 style={{...sidebarTitleStyle, color:'#3b82f6'}}>⚙️ PARAMÈTRES GÉNÉRAUX</h3>
                         <div style={rowStyle}><label style={labelStyle}>Année</label><input type="number" value={year} onChange={e=>handleYearChange(e.target.value)} style={numberInputStyle}/></div>
                         <div style={rowStyle}><label style={labelStyle}>Jour Début</label><input type="number" value={startDay} onChange={e=>setStartDay(Number(e.target.value))} style={numberInputStyle}/></div>
                         <div style={rowStyle}><label style={labelStyle}>Jour Fin</label><input type="number" value={endDay} onChange={e=>setEndDay(Number(e.target.value))} style={numberInputStyle}/></div>
@@ -442,7 +443,9 @@ function App() {
                             <h3 style={{...sidebarTitleStyle, color:'#10b981', marginBottom:0}}>🕒 VACATIONS (HH:MM)</h3>
                             <button onClick={handleAddVacation} style={{fontSize:11, padding:'4px 8px', background:'#ecfdf5', color:'#10b981', border:'1px solid #a7f3d0', borderRadius:4, cursor:'pointer', fontWeight:'bold'}}>+ Ajouter</button>
                         </div>
-                        {Object.entries(config.VACATIONS).map(([code, horaire]: any) => (
+                        {Object.entries(config.VACATIONS)
+                            .sort((a: any, b: any) => a[1].debut - b[1].debut) // Tri chronologique
+                            .map(([code, horaire]: any) => (
                             <div key={code} style={{display:'flex', alignItems:'center', gap:5, marginBottom:5, background:'#f8fafc', padding:6, borderRadius:6, border:'1px solid #f1f5f9'}}>
                                 <span style={{fontWeight:'bold', fontSize:12, minWidth:35, textAlign:'center', background:'white', border:'1px solid #e2e8f0', borderRadius:4, padding:'4px 0', color:'#334155'}}>{code}</span>
                                 <TimeInput val={horaire.debut} onSave={(v) => handleChangeVacation(code, 'debut', v)} />

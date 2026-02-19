@@ -50,10 +50,18 @@ const SummaryHeader = (props: any) => {
         });
     }
 
-    // Préparation affichage (trié par nombre décroissant)
+    // Préparation affichage
+    // 1. Filtrer ceux qui ont des manquants (> 0)
+    // 2. TRIER PAR ORDRE HORAIRE (debut) et non par nombre
     const summary = Object.entries(missingCounts)
         .filter(([_, count]) => count > 0)
-        .sort((a, b) => b[1] - a[1]);
+        .sort((a, b) => {
+            const codeA = a[0];
+            const codeB = b[0];
+            const startA = config?.VACATIONS[codeA]?.debut || 0;
+            const startB = config?.VACATIONS[codeB]?.debut || 0;
+            return startA - startB; // Tri croissant des heures
+        });
 
     return (
         <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:'100%', height:'100%', padding: '4px 0', background:'#fff', borderBottom:'2px solid #cbd5e1'}}>
@@ -63,7 +71,7 @@ const SummaryHeader = (props: any) => {
                 // Si tout est couvert
                 <div style={{fontSize: 16}}>✅</div>
             ) : (
-                // Liste des manquants
+                // Liste des manquants classée par heure
                 <div style={{display:'flex', flexDirection:'column', gap: 0, overflowY:'auto', width:'100%', maxHeight:'100px'}}>
                     {summary.map(([shift, count]) => (
                         <div key={shift} style={{display:'flex', justifyContent:'center', gap:4}}>
@@ -81,7 +89,14 @@ const SummaryHeader = (props: any) => {
 const GlobalHeader = (props: any) => {
     const { config, context } = props;
     const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
+    
+    // Récupération et Tri Horaire
     const allShifts = config && config.VACATIONS ? Object.keys(config.VACATIONS) : ['M', 'J1', 'J3'];
+    allShifts.sort((a: string, b: string) => {
+        const startA = config?.VACATIONS[a]?.debut || 0;
+        const startB = config?.VACATIONS[b]?.debut || 0;
+        return startA - startB;
+    });
     
     return (
         <div style={{display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', paddingTop: 6, borderLeft: '1px solid #cbd5e1', background: '#f1f5f9'}}>
@@ -120,9 +135,12 @@ const CustomHeader = (props: any) => {
     }
     
     const missingShifts = targetShifts.filter((code: string) => !presentShifts.has(code));
+    
+    // Tri Horaire
     missingShifts.sort((a: string, b: string) => {
-        if (config && config.VACATIONS[a] && config.VACATIONS[b]) return config.VACATIONS[a].debut - config.VACATIONS[b].debut;
-        return a.localeCompare(b);
+        const startA = config?.VACATIONS[a]?.debut || 0;
+        const startB = config?.VACATIONS[b]?.debut || 0;
+        return startA - startB;
     });
 
     return (
@@ -216,9 +234,7 @@ const AgentCellRenderer = (props: any) => {
                 </span>
             </div>
             <div style={{display:'flex', alignItems:'center', gap: 8, marginTop: 2}}>
-                <div style={{fontSize: 10, color: statsColor, fontWeight: 700}}>
-                    {worked} <span style={{color:'#cbd5e1', fontWeight:400}}>/</span> {target}
-                </div>
+                <div style={{fontSize: 10, color: statsColor, fontWeight: 700}}>{worked} <span style={{color:'#cbd5e1', fontWeight:400}}>/</span> {target}</div>
                 {refusedCount > 0 && ( 
                     <div title={`${refusedCount} demande(s) non respectée(s)`} style={{fontSize: 9, color: '#ef4444', fontWeight: '800', background: '#fee2e2', padding: '1px 4px', borderRadius: '4px', border: '1px solid #fca5a5'}}>
                         {refusedCount} ⚠️
@@ -229,7 +245,7 @@ const AgentCellRenderer = (props: any) => {
     );
 };
 
-// --- 5. SHIFT CELL (CELLULE PRINCIPALE) ---
+// --- 5. SHIFT CELL ---
 const ShiftCellRenderer = (props: any) => {
     const rawVal = props.value;
     const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView, hideOff } = props.context || {};
@@ -244,10 +260,8 @@ const ShiftCellRenderer = (props: any) => {
 
     const displayVal = normalize(rawVal);
     
-    // Si vide (avant calcul), on ne rend rien
     if (displayVal === '') return null;
 
-    // Analyse Demande
     const dayStr = safeString(dayNum);
     const rawRequest = preAssignments && preAssignments[agentName] ? preAssignments[agentName][dayStr] : '';
     let allowedCodes: string[] = [];
@@ -257,21 +271,18 @@ const ShiftCellRenderer = (props: any) => {
 
     const hasRequest = allowedCodes.length > 0;
     const isMatch = hasRequest && allowedCodes.includes(displayVal);
-    
     const cellKey = `${agentName}_${dayNum}`;
     const isSoft = softConstraints && softConstraints.has(cellKey);
 
-    // BORDURES
     const getBorderStyle = () => {
         if (isDesiderataView) return isSoft ? '2px solid #9333ea' : '1px solid #cbd5e1';
         if (showDesiderataMatch && hasRequest) {
-            if (isMatch) return '2px solid #16a34a'; // Vert
-            return '2px solid #ef4444'; // Rouge
+            if (isMatch) return '2px solid #16a34a'; 
+            return '2px solid #ef4444'; 
         }
         return `1px solid ${style.border}`;
     };
 
-    // STYLES
     let style = { color: '#334155', bg: '#f1f5f9', border: '#cbd5e1' }; 
     const styleKey = displayVal; 
 
@@ -287,11 +298,8 @@ const ShiftCellRenderer = (props: any) => {
         
         case 'OFF': 
             if (!isDesiderataView && hideOff) {
-                // Masqué : Transparent partout (Texte + Fond)
-                // Cela laisse voir la couleur de fond de la grille (ex: gris pour le weekend)
                 style = { color: 'transparent', bg: 'transparent', border: 'transparent' };
             } else {
-                // Visible : Texte Noir, Fond Transparent
                 style = { color: '#000000', bg: 'transparent', border: 'transparent' }; 
             }
             break;
@@ -341,7 +349,6 @@ const ShiftCellRenderer = (props: any) => {
                 fontWeight: '700',
                 width: '34px',
                 textAlign: 'center', 
-                // Ombre pour mettre en valeur les matchs/mismatches
                 boxShadow: isRed 
                     ? '0 0 4px rgba(239, 68, 68, 0.5)' 
                     : (isGreen 
@@ -437,6 +444,7 @@ const PlanningTable: React.FC<PlanningTableProps> = ({
 
       cols.push({
         field: dayStr, width: 52, headerClass: isWeekend ? 'weekend-header' : '',
+        // UTILISATION DU HEADER JOURNALIER ICI
         headerComponent: 'dayColumnHeader',
         headerComponentParams: { displayName: date.toLocaleDateString('fr-FR', { weekday: 'short' }), dayNum: dayNum, fullDate: dateStr, config: config, context: { optionalCoverage, onToggleOptionalCoverage, isDesiderataView, daysList } },
         cellRenderer: 'shiftCellRenderer',
