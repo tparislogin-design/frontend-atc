@@ -3,7 +3,7 @@ export interface AppConfig {
   CONTROLEURS: string[];
   CONTROLLERS_AFFECTES_BUREAU?: string[];
   CONTROLLERS_PARITE_STRICTE?: string[];
-  AGENT_WORK_RATES?: { [agentName: string]: number }; // NOUVEAU
+  AGENT_WORK_RATES?: { [agentName: string]: number };
   VACATIONS: {
     [code: string]: {
       debut: number;
@@ -14,6 +14,10 @@ export interface AppConfig {
     [agentName: string]: {
       OR: string[][];
       ARGENT: string[][];
+      // NOUVEAUX CHAMPS
+      STRICT_MODE?: boolean; // Force le respect des cycles uniquement
+      BONUS_OR?: number;     // Points personnalisés (défaut 50)
+      BONUS_ARGENT?: number; // Points personnalisés (défaut 10)
     };
   };
   CONTRAT: {
