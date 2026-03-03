@@ -1,262 +1,222 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 
 interface BilanProps {
-  planning: any[];
-  config: any;
-  year: number;
-  startDay: number;
-  endDay: number;
+    planning: any[];
+    config: any;
+    year: number;
+    startDay: number;
+    endDay: number;
 }
 
-// Utilitaire pour avoir le numéro de semaine
-const getWeekNumber = (d: Date) => {
-    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
-    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-    return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-};
+// Interface pour typer les données calculées
+interface StatResult {
+    agent: string;
+    isBureau: boolean;
+    rate: number;
+    worked: number;
+    target: number;
+    diff: number;
+    details: Record<string, number>;
+    leaves: number;
+}
 
-const Bilan: React.FC<BilanProps> = ({ planning, config, year, startDay, endDay }) => {
-  const [sortByHours, setSortByHours] = useState(false);
+const safeString = (val: any) => (val === null || val === undefined ? '' : String(val).trim().toUpperCase());
 
-  // 1. Liste des types de vacations (pour les colonnes dynamiques)
-  const shiftTypes = useMemo(() => Object.keys(config.VACATIONS).sort(), [config]);
+const Bilan: React.FC<BilanProps> = ({ planning, config, startDay, endDay }) => {
 
-  // 2. Calculer la liste des jours (identique à PlanningTable pour la cohérence)
-  const daysRange = useMemo(() => {
-    const range: {dayNum: number, date: Date, isWeekend: boolean, weekKey: string}[] = [];
-    const list = [];
-    
-    if (startDay <= endDay) {
-        for (let i = startDay; i <= endDay; i++) list.push(i);
-    } else {
-        for (let i = startDay; i <= 365; i++) list.push(i);
-        for (let i = 1; i <= endDay; i++) list.push(i);
-    }
+    // 1. Calcul des Statistiques
+    const stats = useMemo<StatResult[]>(() => {
+        // On se base sur la liste ordonnée des contrôleurs pour l'affichage
+        const orderedAgents = config.CONTROLEURS || [];
+        const vacationsCodes = Object.keys(config.VACATIONS || {});
 
-    list.forEach(dayNum => {
-        let currentYear = year;
-        if (startDay > endDay && dayNum >= startDay) currentYear = year - 1;
-        
-        const d = new Date(currentYear, 0, dayNum);
-        const weekNum = getWeekNumber(d);
-        // Clé unique pour la semaine (ex: "2026-W05")
-        const weekKey = `${currentYear}-W${weekNum.toString().padStart(2, '0')}`;
-        
-        range.push({
-            dayNum,
-            date: d,
-            isWeekend: d.getDay() === 0 || d.getDay() === 6,
-            weekKey
+        return orderedAgents.map((agent: string) => {
+            // Trouver les données de planning pour cet agent
+            const agentRow = planning.find((p: any) => p.Agent === agent) || {};
+            
+            let worked = 0;
+            let leaves = 0; // 'C' uniquement
+            let neutralized = 0; // 'C' + autres codes non productifs (Stage, etc.)
+            
+            // Compteurs par type de vacation
+            const details: Record<string, number> = {};
+            vacationsCodes.forEach((v: string) => details[v] = 0);
+
+            // Parcours des jours
+            // Note: Calcul simple de la durée en jours
+            const daysCount = (endDay - startDay) + 1;
+
+            for (let i = startDay; i <= endDay; i++) {
+                const val = safeString(agentRow[i.toString()]);
+                
+                if (!val || val === '' || val === 'OFF' || val === '0') continue;
+
+                if (val === 'C') {
+                    leaves++;
+                    neutralized++;
+                } else if (vacationsCodes.includes(val)) {
+                    worked++;
+                    // On incrémente le compteur spécifique si la clé existe
+                    if (details[val] !== undefined) {
+                        details[val]++;
+                    }
+                } else {
+                    // Autre code (Stage, FSAU...) -> Compte comme neutralisé pour la cible
+                    neutralized++;
+                }
+            }
+
+            // Calcul Cible (Même formule que PlanningTable)
+            const rate = (config.AGENT_WORK_RATES && config.AGENT_WORK_RATES[agent]) || 100;
+            const balance = (config.AGENT_BALANCES && config.AGENT_BALANCES[agent]) || 0;
+            
+            // Formule : Taux% * (Total - Neutralisés) / 2
+            const baseTarget = Math.ceil((rate / 100) * (daysCount - neutralized) / 2);
+            const finalTarget = baseTarget + balance;
+            
+            const diff = worked - finalTarget;
+
+            return {
+                agent,
+                isBureau: (config.CONTROLLERS_AFFECTES_BUREAU || []).includes(agent),
+                rate,
+                worked,
+                target: finalTarget,
+                diff,
+                details,
+                leaves
+            };
         });
-    });
-    return range;
-  }, [year, startDay, endDay]);
+    }, [planning, config, startDay, endDay]);
 
-
-  // 3. Calcul des Statistiques par Agent
-  const stats = useMemo(() => {
-    if (!planning || planning.length === 0) return [];
-
-    const computed = planning.map(row => {
-      let totalHours = 0;
-      let workedShiftsCount = 0; // Nombre de tours travaillés (hors congés)
-      let leaveDays = 0;         // Nombre de congés (C)
-      
-      const counts: any = {};
-      shiftTypes.forEach(t => counts[t] = 0); // Init à 0
-      counts['AUTRE'] = 0;
-
-      const weekendsWorked = new Set<string>(); // On stocke les clés de semaine des WE travaillés
-      const weeklyHours: {[key: string]: number} = {};
-
-      // Init weekly hours à 0 pour toutes les semaines de la période
-      const allWeeks = Array.from(new Set(daysRange.map(d => d.weekKey)));
-      allWeeks.forEach(w => weeklyHours[w] = 0);
-
-      // Parcours des jours de la période
-      daysRange.forEach(({ dayNum, isWeekend, weekKey }) => {
-          const code = row[dayNum.toString()];
-          if (!code || code === 'OFF' || code === '') return;
-
-          // -- Comptage Vacations --
-          if (code === 'C') {
-              leaveDays++;
-          } else {
-              // C'est un jour travaillé
-              if (config.VACATIONS[code]) {
-                  counts[code] = (counts[code] || 0) + 1;
-              } else {
-                  // Codes non définis dans config (ex: A1, A2 si pas dans config)
-                  // On essaie de grouper intelligemment ou on met dans Autre
-                  // Pour l'affichage demandé, on peut juste compter si le code ressemble
-                  if (shiftTypes.includes(code)) counts[code]++;
-                  else counts['AUTRE']++;
-              }
-              workedShiftsCount++;
-
-              // -- Weekends --
-              // Si c'est un Samedi ou Dimanche travaillé, on marque cette semaine comme "WE touché"
-              if (isWeekend) {
-                  weekendsWorked.add(weekKey);
-              }
-          }
-
-          // -- Heures --
-          let duree = 0;
-          if (config.VACATIONS[code]) {
-              duree = config.VACATIONS[code].fin - config.VACATIONS[code].debut;
-          } else if (code.startsWith('A')) {
-              duree = 7.5; // Valeur par défaut pour A1/A2 si non config
-          } else if (code === 'M') { // Fallback si non config
-              duree = 7.0; 
-          }
-          
-          if (duree > 0) {
-              totalHours += duree;
-              weeklyHours[weekKey] = (weeklyHours[weekKey] || 0) + duree;
-          }
-      });
-
-      // -- Calcul Cible (Target) --
-      // Formule : (Période - Congés) / 2
-      const periodLength = daysRange.length;
-      const targetShifts = Math.max(0, Math.ceil((periodLength - leaveDays) / 2));
-
-      return {
-        agent: row.Agent,
-        totalHours,
-        workedShiftsCount,
-        targetShifts,
-        counts,
-        weekendsCount: weekendsWorked.size,
-        weeklyHours,
-        ratio: targetShifts > 0 ? (workedShiftsCount / targetShifts) : 0
-      };
-    });
-
-    // Tri conditionnel
-    if (sortByHours) {
-        return [...computed].sort((a, b) => b.totalHours - a.totalHours);
-    }
-    return computed; // Ordre original (celui du CSV/GoogleSheet)
-
-  }, [planning, config, daysRange, shiftTypes, sortByHours]);
-
-
-  if (!planning || planning.length === 0) return <div style={{padding:20}}>Aucune donnée.</div>;
-
-  return (
-    <div style={{padding: 20, height:'100%', overflow:'auto', fontFamily:'"Inter", sans-serif'}}>
-        
-        {/* Header Bilan */}
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 20}}>
-            <div>
-                <h2 style={{margin:0, color:'#1e293b'}}>📊 Bilan Détaillé</h2>
-                <div style={{fontSize:12, color:'#64748b'}}>Période de {daysRange.length} jours • {shiftTypes.length} types de vacations</div>
+    // 2. Rendu
+    return (
+        <div style={{ padding: '20px', fontFamily: '"Inter", sans-serif', maxWidth: '1200px', margin: '0 auto' }}>
+            
+            <div style={{marginBottom: 20, borderBottom:'1px solid #e2e8f0', paddingBottom:10}}>
+                <h2 style={{ margin: 0, color: '#1e293b' }}>📊 Bilan de la période</h2>
+                <div style={{ fontSize: 13, color: '#64748b' }}>
+                    Du jour {startDay} au jour {endDay} • {config.CONTROLEURS.length} Agents
+                </div>
             </div>
-            <button 
-                onClick={() => setSortByHours(!sortByHours)}
-                style={{
-                    background:'white', border:'1px solid #cbd5e1', padding:'8px 16px', borderRadius:6, 
-                    cursor:'pointer', fontSize:13, fontWeight:600, color:'#475569', display:'flex', alignItems:'center', gap:8
-                }}
-            >
-                {sortByHours ? '🔽 Tri : Heures' : '🔃 Tri : Original'}
-            </button>
-        </div>
 
-        <div style={{background:'white', borderRadius:8, boxShadow:'0 1px 3px rgba(0,0,0,0.1)', overflowX:'auto'}}>
-            <table style={{width:'100%', borderCollapse:'collapse', minWidth: 1000}}>
-                <thead style={{background:'#f8fafc', borderBottom:'2px solid #e2e8f0'}}>
-                    <tr>
-                        <th style={{...thStyle, width:80, position:'sticky', left:0, background:'#f8fafc', zIndex:10}}>Agent</th>
-                        
-                        {/* Objectifs */}
-                        <th style={{...thStyle, width:100, textAlign:'center'}}>Vacations<br/><span style={{fontSize:10, fontWeight:'normal'}}>Prog / Dûes</span></th>
-                        <th style={{...thStyle, width:80, textAlign:'right'}}>Total H</th>
-                        <th style={{...thStyle, width:80, textAlign:'center'}}>Weekends</th>
+            <div style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, background: 'white' }}>
+                    <thead>
+                        <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
+                            <th style={thStyle}>Agent</th>
+                            <th style={thStyle}>Taux</th>
+                            
+                            {/* Section Objectifs */}
+                            <th style={{...thStyle, borderLeft:'2px solid #cbd5e1', textAlign:'center', color:'#334155'}}>Cible</th>
+                            <th style={{...thStyle, textAlign:'center', color:'#16a34a'}}>Réalisé</th>
+                            <th style={{...thStyle, textAlign:'center'}}>Écart</th>
+                            
+                            {/* Section Détails */}
+                            <th style={{...thStyle, borderLeft:'2px solid #cbd5e1'}}>Détail Vacations</th>
+                            <th style={{...thStyle, textAlign:'right'}}>Congés</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {stats.map((stat: StatResult, idx: number) => {
+                            const isEven = idx % 2 === 0;
+                            const diffColor = stat.diff === 0 ? '#94a3b8' : (stat.diff > 0 ? '#16a34a' : '#ef4444');
+                            const diffSign = stat.diff > 0 ? '+' : '';
 
-                        {/* Types de vacations (Dynamique) */}
-                        {shiftTypes.map(type => (
-                            <th key={type} style={{...thStyle, textAlign:'center', color:'#64748b', fontSize:11}}>{type}</th>
-                        ))}
-                        <th style={{...thStyle, textAlign:'center', color:'#db2777'}}>Congés</th>
-
-                        {/* Heures Hebdo */}
-                        <th style={{...thStyle, textAlign:'left', paddingLeft:20}}>Heures / Semaine Civile</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {stats.map((row, idx) => {
-                        const isTargetMet = row.workedShiftsCount >= row.targetShifts - 1; // Tolérance de 1
-                        const ratioColor = isTargetMet ? '#16a34a' : '#ea580c';
-
-                        return (
-                            <tr key={row.agent} style={{borderBottom: '1px solid #f1f5f9', background: idx%2===0 ? 'white':'#fafafa'}}>
-                                {/* Agent */}
-                                <td style={{...tdStyle, fontWeight:'bold', color:'#1e293b', position:'sticky', left:0, background: idx%2===0 ? 'white':'#fafafa', borderRight:'1px solid #f1f5f9'}}>{row.agent}</td>
-                                
-                                {/* Vacations Target */}
-                                <td style={{...tdStyle, textAlign:'center'}}>
-                                    <span style={{fontWeight:'bold', color: ratioColor}}>{row.workedShiftsCount}</span>
-                                    <span style={{color:'#94a3b8', fontSize:11}}> / {row.targetShifts}</span>
-                                </td>
-
-                                {/* Total H */}
-                                <td style={{...tdStyle, textAlign:'right', fontWeight:'bold'}}>{row.totalHours.toFixed(1)}</td>
-
-                                {/* Weekends */}
-                                <td style={{...tdStyle, textAlign:'center'}}>
-                                    <span style={{background:'#eff6ff', color:'#2563eb', padding:'2px 8px', borderRadius:10, fontWeight:'bold', fontSize:11}}>
-                                        {row.weekendsCount}
-                                    </span>
-                                </td>
-
-                                {/* Colonnes Dynamiques */}
-                                {shiftTypes.map(type => (
-                                    <td key={type} style={{...tdStyle, textAlign:'center'}}>
-                                        {row.counts[type] > 0 ? (
-                                            <span style={{fontWeight:'bold', color:'#475569'}}>{row.counts[type]}</span>
-                                        ) : <span style={{color:'#e2e8f0'}}>-</span>}
+                            return (
+                                <tr key={stat.agent} style={{ background: isEven ? '#ffffff' : '#fcfcfc', borderBottom: '1px solid #f1f5f9' }}>
+                                    
+                                    {/* Agent */}
+                                    <td style={tdStyle}>
+                                        <div style={{display:'flex', alignItems:'center', gap:6}}>
+                                            <span style={{ fontWeight: 'bold', color: stat.isBureau ? '#2563eb' : '#1e293b' }}>
+                                                {stat.agent}
+                                            </span>
+                                            {stat.isBureau && <span title="Bureau">🏢</span>}
+                                        </div>
                                     </td>
-                                ))}
-                                <td style={{...tdStyle, textAlign:'center', color:'#db2777', fontWeight:'bold'}}>
-                                    {row.counts['AUTRE'] > 0 ? row.counts['AUTRE'] : (row.targetShifts * 2 - daysRange.length - row.workedShiftsCount > 0 ? '?' : '-')} {/* Fallback si congés non détectés */}
-                                </td>
 
-                                {/* Heures Hebdo (Mini Grille) */}
-                                <td style={{...tdStyle, paddingLeft:20}}>
-                                    <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
-                                        {Object.entries(row.weeklyHours).map(([week, hours]: any) => (
-                                            <div key={week} style={{
-                                                fontSize:10, padding:'2px 6px', borderRadius:4, 
-                                                border:'1px solid',
-                                                borderColor: hours > 35 ? '#fca5a5' : '#cbd5e1',
-                                                background: hours > 35 ? '#fef2f2' : 'white',
-                                                color: hours > 35 ? '#991b1b' : '#64748b'
-                                            }}>
-                                                <span style={{fontWeight:'bold'}}>{week.split('-')[1]}</span>: {hours}h
-                                            </div>
-                                        ))}
-                                    </div>
-                                </td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
+                                    {/* Taux */}
+                                    <td style={tdStyle}>
+                                        {stat.rate < 100 ? (
+                                            <span style={{ fontSize: 11, background: '#fee2e2', color: '#ef4444', padding: '2px 6px', borderRadius: 4, fontWeight: '600' }}>
+                                                {stat.rate}%
+                                            </span>
+                                        ) : (
+                                            <span style={{color:'#cbd5e1'}}>100%</span>
+                                        )}
+                                    </td>
+
+                                    {/* Cible (Target) */}
+                                    <td style={{...tdStyle, borderLeft:'2px solid #f1f5f9', textAlign:'center', fontWeight:'600', color:'#64748b'}}>
+                                        {stat.target}
+                                    </td>
+
+                                    {/* Réalisé (Worked) */}
+                                    <td style={{...tdStyle, textAlign:'center', fontWeight:'800', color:'#1e293b', fontSize:14}}>
+                                        {stat.worked}
+                                    </td>
+
+                                    {/* Écart (Diff) */}
+                                    <td style={{...tdStyle, textAlign:'center', fontWeight:'bold', color: diffColor}}>
+                                        {stat.diff !== 0 && (
+                                            <span style={{ background: stat.diff > 0 ? '#dcfce7' : '#fee2e2', padding: '2px 8px', borderRadius: 12, fontSize: 12 }}>
+                                                {diffSign}{stat.diff}
+                                            </span>
+                                        )}
+                                        {stat.diff === 0 && <span style={{color:'#cbd5e1'}}>=</span>}
+                                    </td>
+
+                                    {/* Détail Vacations */}
+                                    <td style={{...tdStyle, borderLeft:'2px solid #f1f5f9'}}>
+                                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                            {Object.entries(stat.details).map(([code, count]) => {
+                                                if (count === 0) return null;
+                                                return (
+                                                    <div key={code} style={{ 
+                                                        display: 'flex', alignItems: 'center', gap: 4, 
+                                                        background: '#f1f5f9', padding: '2px 6px', borderRadius: 4, 
+                                                        border: '1px solid #e2e8f0' 
+                                                    }}>
+                                                        <span style={{ fontSize: 10, fontWeight: '700', color: '#64748b' }}>{code}</span>
+                                                        <span style={{ fontSize: 11, fontWeight: '700', color: '#0f172a' }}>{count as number}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </td>
+
+                                    {/* Congés */}
+                                    <td style={{...tdStyle, textAlign:'right', color: stat.leaves > 0 ? '#db2777' : '#e2e8f0', fontWeight: stat.leaves > 0 ? '600' : '400'}}>
+                                        {stat.leaves} j
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div style={{marginTop:20, fontSize:12, color:'#94a3b8', fontStyle:'italic'}}>
+                * La cible est calculée selon la formule : (Jours Total - Jours Neutralisés) / 2 x Taux% + Balance Manuelle.
+            </div>
         </div>
-    </div>
-  );
+    );
 };
 
+// Styles CSS-in-JS simples
 const thStyle: React.CSSProperties = {
-    padding: '12px 10px', fontSize: 11, textTransform: 'uppercase', color: '#64748b', whiteSpace:'nowrap'
+    padding: '12px 16px',
+    fontSize: '11px',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    color: '#64748b',
+    letterSpacing: '0.5px'
 };
 
 const tdStyle: React.CSSProperties = {
-    padding: '10px 10px', fontSize: 13, color: '#334155'
+    padding: '10px 16px',
+    color: '#334155'
 };
 
 export default Bilan;
