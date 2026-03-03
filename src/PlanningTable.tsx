@@ -14,22 +14,19 @@ const safeString = (val: any): string => {
     return String(val);
 };
 
-// ==========================================
-// 1. COMPOSANTS INTERNES HEADER
-// ==========================================
-
-// A. Vue DÉSIDÉRATA : Les contrôles globaux
-const DesiderataViewHeader = ({ config, context }: any) => {
+// --- 1. HEADER GLOBAL (Vue Désidérata - 2 COLONNES) ---
+const GlobalHeader = (props: any) => {
+    const { config, context } = props;
     const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
     
     const allShifts = config && config.VACATIONS ? Object.keys(config.VACATIONS) : ['M', 'J1', 'J3'];
-    // Tri chronologique
+    
     allShifts.sort((a: string, b: string) => {
         const startA = config?.VACATIONS[a]?.debut || 0;
         const startB = config?.VACATIONS[b]?.debut || 0;
         return startA - startB;
     });
-
+    
     return (
         <div style={{
             display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', 
@@ -38,18 +35,44 @@ const DesiderataViewHeader = ({ config, context }: any) => {
             borderBottom:'1px solid #cbd5e1',
             boxSizing: 'border-box'
         }}>
-            <div style={{fontSize: 10, fontWeight: '800', color: '#64748b', textTransform:'uppercase'}}>GLOBAL</div>
-            <div style={{fontSize: 9, color: '#94a3b8', fontStyle:'italic', marginBottom: 6}}>1-Clic</div>
-            <div style={{display:'flex', flexDirection:'column', gap: 1, marginTop: 'auto', paddingBottom: 6}}>
+            <div style={{fontSize: 10, fontWeight: '800', color: '#64748b', textTransform:'uppercase', flexShrink: 0}}>GLOBAL</div>
+            <div style={{fontSize: 9, color: '#94a3b8', fontStyle:'italic', marginBottom: 4, flexShrink: 0}}>1-Clic</div>
+            
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr', 
+                columnGap: '2px', 
+                rowGap: '2px',    
+                width: '100%', 
+                padding: '0 4px',
+                boxSizing: 'border-box',
+                paddingBottom: 4,
+                overflowY: 'auto'
+            }}>
                 {allShifts.map((code: string, idx: number) => {
-                    const isOptionalEverywhere = daysList.every((d: number) => {
-                        return optionalCoverage && optionalCoverage[d.toString()] && optionalCoverage[d.toString()].includes(code);
-                    });
+                    let isOptionalEverywhere = false;
+                    if (daysList && Array.isArray(daysList)) {
+                        isOptionalEverywhere = daysList.every((d: number) => {
+                            return optionalCoverage && optionalCoverage[d.toString()] && optionalCoverage[d.toString()].includes(code);
+                        });
+                    }
                     const color = isOptionalEverywhere ? '#2563eb' : '#ef4444';
                     return (
-                        <span key={idx} onClick={(e) => { e.stopPropagation(); onToggleGlobalOptional(code); }} title="Rendre optionnel/obligatoire pour TOUT le mois" style={{ fontSize: 9, color: color, fontWeight: '700', lineHeight: '11px', textAlign:'center', cursor: 'pointer' }}>
-                            {code}
-                        </span>
+                        <div key={idx} style={{display:'flex', justifyContent:'center', alignItems:'center'}}>
+                            <span 
+                                onClick={(e) => { e.stopPropagation(); onToggleGlobalOptional(code); }} 
+                                title={`Rendre ${code} optionnel/obligatoire pour TOUT le mois`} 
+                                style={{ 
+                                    fontSize: 10, color: color, fontWeight: '700', 
+                                    cursor: 'pointer', padding: '2px 4px',
+                                    border: '1px solid #e2e8f0', borderRadius: '4px',
+                                    backgroundColor: '#fff',
+                                    width: '100%', textAlign: 'center'
+                                }}
+                            >
+                                {code}
+                            </span>
+                        </div>
                     );
                 })}
             </div>
@@ -57,8 +80,9 @@ const DesiderataViewHeader = ({ config, context }: any) => {
     );
 };
 
-// B. Vue PLANNING : Le résumé des manquants
-const PlanningViewHeader = ({ api, config, context }: any) => {
+// --- 2. HEADER RÉSUMÉ (Vue Planning) ---
+const SummaryHeader = (props: any) => {
+    const { api, config, context } = props;
     const { daysList } = context; 
     
     const targetShifts = config && config.VACATIONS ? Object.keys(config.VACATIONS) : ['M', 'J1', 'J3'];
@@ -67,35 +91,44 @@ const PlanningViewHeader = ({ api, config, context }: any) => {
 
     let hasAnyData = false;
 
-    // On ne calcule que si l'API est dispo
     if (api && daysList) {
         daysList.forEach((dayNum: number) => {
             const dayStr = safeString(dayNum);
             const presentOnDay = new Set<string>();
+            
             api.forEachNode((node: any) => {
                 const val = node.data ? node.data[dayStr] : null;
                 if (val && !['OFF', 'C', '', 'O'].includes(val)) {
                     presentOnDay.add(val);
-                    hasAnyData = true; // On a trouvé au moins une vacation
+                    hasAnyData = true; 
                 }
             });
+
             targetShifts.forEach((shift: string) => {
-                if (!presentOnDay.has(shift)) missingCounts[shift]++;
+                if (!presentOnDay.has(shift)) {
+                    missingCounts[shift]++;
+                }
             });
         });
     }
 
-    // SI LE PLANNING EST VIDE (ex: juste après import, avant génération) -> ETAT NEUTRE
+    const boxStyle: React.CSSProperties = {
+        display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', 
+        width:'100%', height:'100%', padding: '4px', background:'#fff', 
+        borderRight:'1px solid #bdc3c7', 
+        borderBottom:'1px solid #bdc3c7', 
+        boxSizing: 'border-box'
+    };
+
     if (!hasAnyData) {
         return (
-            <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:'100%', height:'100%', padding: '4px 0', background:'#fff', borderRight:'2px solid #cbd5e1', borderBottom:'2px solid #cbd5e1'}}>
+            <div style={boxStyle}>
                 <div style={{fontSize: 10, fontWeight: '800', color: '#94a3b8'}}>PLANNING</div>
                 <div style={{fontSize: 16, marginTop: 2}}>⚪</div>
             </div>
         );
     }
 
-    // SI DONNÉES : AFFICHER MANQUANTS
     const summary = Object.entries(missingCounts)
         .filter(([_, count]) => count > 0)
         .sort((a, b) => {
@@ -105,15 +138,14 @@ const PlanningViewHeader = ({ api, config, context }: any) => {
         });
 
     return (
-        <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:'100%', height:'100%', padding: '4px 0', background:'#fff', borderRight:'2px solid #cbd5e1', borderBottom:'2px solid #cbd5e1'}}>
-            <div style={{fontSize: 10, fontWeight: '800', color: '#334155', marginBottom: 4}}>MANQUANTS</div>
-            {summary.length === 0 ? <div style={{fontSize: 16}}>✅</div> : (
-                <div style={{display:'flex', flexDirection:'column', gap: 0, overflowY:'auto', width:'100%', maxHeight:'100px'}}>
-                    {summary.map(([shift, count]) => (
-                        <div key={shift} style={{display:'flex', justifyContent:'center', gap:4}}>
-                            <span style={{fontSize: 11, fontWeight:'800', color:'#ef4444'}}>{count}</span>
-                            <span style={{fontSize: 10, fontWeight:'600', color:'#64748b'}}>{shift}</span>
-                        </div>
+        <div style={boxStyle}>
+            <div style={{fontSize: 9, fontWeight: '800', color: '#64748b', marginBottom: 4, textTransform:'uppercase'}}>MANQUANTS</div>
+            {summary.length === 0 ? <div style={{fontSize: 20}}>✅</div> : (
+                <div style={{textAlign:'center', lineHeight:'1.2', fontSize: 10, fontWeight:'600', color:'#ef4444'}}>
+                    {summary.map(([shift, count], idx) => (
+                        <span key={shift}>
+                            <span style={{fontWeight:'800'}}>{count}</span>x{shift}{idx < summary.length - 1 ? ', ' : ''}
+                        </span>
                     ))}
                 </div>
             )}
@@ -121,21 +153,7 @@ const PlanningViewHeader = ({ api, config, context }: any) => {
     );
 };
 
-// C. LE COMPOSANT MAÎTRE (CornerHeader)
-// C'est lui qui choisit quoi afficher en fonction du contexte
-const CornerHeader = (props: any) => {
-    const { context } = props;
-    // Si on est en mode Desiderata -> Afficher les contrôles globaux
-    if (context.isDesiderataView) {
-        return <DesiderataViewHeader {...props} />;
-    }
-    // Sinon -> Afficher le résumé planning
-    return <PlanningViewHeader {...props} />;
-};
-
-// ==========================================
-// 2. HEADER QUOTIDIEN (Jours)
-// ==========================================
+// --- 3. HEADER QUOTIDIEN ---
 const CustomHeader = (props: any) => {
     const { displayName, dayNum, fullDate, api, config, context } = props;
     const { optionalCoverage, onToggleOptionalCoverage, isDesiderataView } = context || {};
@@ -155,8 +173,7 @@ const CustomHeader = (props: any) => {
     });
 
     let indicatorColor = 'transparent'; 
-    // Pas d'alerte rouge en mode Desiderata (on configure, on ne subit pas)
-    if (missingShifts.length > 0 && !isDesiderataView) {
+    if (missingShifts.length > 0) {
         const dayStr = safeString(dayNum);
         const areAllOptional = missingShifts.every(code => optionalCoverage && optionalCoverage[dayStr]?.includes(code));
         indicatorColor = areAllOptional ? '#2563eb' : '#ef4444'; 
@@ -168,8 +185,7 @@ const CustomHeader = (props: any) => {
             paddingTop: 4, paddingBottom: 2, boxSizing:'border-box',
             borderRight: '1px solid #bdc3c7', 
             borderBottom: `1px solid #bdc3c7`, 
-            // Fond blanc en désidérata (neutre), vert/blanc en planning
-            background: (missingShifts.length > 0 && !isDesiderataView) ? '#fff' : (isDesiderataView ? '#fff' : '#f0fdf4'),
+            background: missingShifts.length > 0 ? '#fff' : '#f0fdf4',
             position: 'relative'
         }}>
             <div style={{lineHeight: '1.1', textAlign:'center', marginBottom: 2}}>
@@ -211,15 +227,11 @@ const CustomHeader = (props: any) => {
     );
 };
 
-// ==========================================
-// 3. CELLULES (AGENT & SHIFT)
-// ==========================================
-
-// --- AGENT CELL ---
+// --- 4. AGENT CELL ---
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
     const rowData = props.data;
-    const { daysList, config, preAssignments, isDesiderataView } = props.context || {}; 
+    const { daysList, config, preAssignments } = props.context || {}; 
 
     const normalize = (v: any) => {
         const s = safeString(v).trim().toUpperCase();
@@ -232,14 +244,12 @@ const AgentCellRenderer = (props: any) => {
         daysList.forEach((dayNum: number) => {
             const dayStr = safeString(dayNum);
             const actualCode = normalize(rowData[dayStr]);
-
             if (actualCode && actualCode !== '' && actualCode !== 'OFF') {
                 if (actualCode === 'C') leaves++;
-                else worked++;
+                else if (config.VACATIONS[actualCode] !== undefined) worked++;
+                else leaves++; 
             }
-
-            // Calcul Refus : UNIQUEMENT EN MODE PLANNING
-            if (!isDesiderataView && preAssignments && preAssignments[agentName]) {
+            if (preAssignments && preAssignments[agentName]) {
                 const req = preAssignments[agentName][dayStr];
                 if (req) {
                     const allowed = safeString(req).split(/[,/ ]+/).map((s: string) => normalize(s)).filter((s: string) => s !== '');
@@ -251,9 +261,7 @@ const AgentCellRenderer = (props: any) => {
     const totalDays = daysList ? daysList.length : 0;
     const workRate = (config?.AGENT_WORK_RATES && config.AGENT_WORK_RATES[agentName]) || 100;
     const target = Math.ceil((workRate / 100) * (totalDays - leaves) / 2);
-    
-    // Pas de couleur de stats (vert/orange) en mode Désidérata
-    const statsColor = isDesiderataView ? '#64748b' : (worked >= (target - 1) ? '#16a34a' : '#ea580c');
+    const statsColor = worked >= (target - 1) ? '#16a34a' : '#ea580c';
     const isBureau = (config?.CONTROLLERS_AFFECTES_BUREAU || []).includes(agentName);
     const nameStyle = { fontWeight: '800', fontSize: 13, color: isBureau ? '#2563eb' : '#334155' };
 
@@ -270,7 +278,7 @@ const AgentCellRenderer = (props: any) => {
     );
 };
 
-// --- SHIFT CELL ---
+// --- 5. SHIFT CELL ---
 const ShiftCellRenderer = (props: any) => {
     const rawVal = props.value;
     const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView, hideOff } = props.context || {};
@@ -356,14 +364,13 @@ const ShiftCellRenderer = (props: any) => {
     );
 };
 
-// ==========================================
-// 6. MAIN
-// ==========================================
+// --- 6. MAIN ---
 const PlanningTable: React.FC<any> = (props) => {
   const { data, year, startDay, endDay, config, isDesiderataView } = props;
 
   const components = useMemo(() => ({
-      cornerHeader: CornerHeader, // Un seul composant qui dispatche
+      agColumnHeaderSummary: SummaryHeader, 
+      agColumnHeaderGlobal: GlobalHeader,   
       dayColumnHeader: CustomHeader,        
       agentCellRenderer: AgentCellRenderer,
       shiftCellRenderer: ShiftCellRenderer
@@ -378,55 +385,4 @@ const PlanningTable: React.FC<any> = (props) => {
 
   const gridContext = { ...props, daysList };
 
-  // Calcul dynamique hauteur Header
-  const vacationCount = config && config.VACATIONS ? Object.keys(config.VACATIONS).length : 6;
-  const calculatedHeaderHeight = 45 + (vacationCount * 14); 
-  const headerHeight = isDesiderataView ? Math.max(110, calculatedHeaderHeight) : 110;
-
-  const columnDefs = useMemo<ColDef[]>(() => {
-    const cols: ColDef[] = [{ 
-        field: 'Agent', headerName: 'AGENT', 
-        // CORRECTION MAJEURE : On utilise toujours CornerHeader
-        headerComponent: 'cornerHeader',
-        headerComponentParams: { config, context: gridContext },
-        pinned: 'left', width: 140, cellRenderer: 'agentCellRenderer', cellStyle: { backgroundColor: '#f8fafc', borderRight: '2px solid #cbd5e1', display:'flex', alignItems:'center', padding:0 } 
-    }];
-    
-    daysList.forEach(dayNum => {
-      const dayStr = safeString(dayNum);
-      let currentYear = year;
-      if (startDay > endDay && dayNum >= startDay) currentYear = year - 1; 
-      const date = new Date(currentYear, 0, dayNum); 
-      const dateStr = date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-      const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-
-      cols.push({
-        field: dayStr, width: 52, headerClass: isWeekend ? 'weekend-header' : '',
-        headerComponent: 'dayColumnHeader',
-        headerComponentParams: { displayName: date.toLocaleDateString('fr-FR', { weekday: 'short' }), dayNum: dayNum, fullDate: dateStr, config: config, context: gridContext },
-        cellRenderer: 'shiftCellRenderer',
-        cellStyle: { display: 'flex', justifyContent: 'center', alignItems: 'center', borderRight: '1px solid #cbd5e1', padding: 0, backgroundColor: isWeekend ? '#e5e7eb' : 'white' },
-        editable: false 
-      });
-    });
-    return cols; 
-  }, [year, startDay, endDay, isDesiderataView, daysList, config, gridContext]);
-
-  return (
-    <div className="ag-theme-balham" style={{ height: '100%', width: '100%', zoom: `${props.zoomLevel}%` }}>
-      <style>{`.ag-theme-balham .ag-header-cell { padding: 0 !important; } .ag-theme-balham .ag-header-cell-label { width: 100%; height: 100%; padding: 0; } .ag-theme-balham .ag-root-wrapper { border: 1px solid #94a3b8; } .ag-theme-balham .ag-header { border-bottom: 2px solid #cbd5e1; background-color: white; } .ag-theme-balham .ag-row { border-bottom-color: #cbd5e1; } .ag-theme-balham .ag-pinned-left-header { border-right: 2px solid #cbd5e1; } .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; } .ag-theme-balham .weekend-header { background-color: #e5e7eb !important; border-bottom: 1px solid #cbd5e1; }`}</style>
-      <AgGridReact 
-        rowData={data || []} 
-        columnDefs={columnDefs} 
-        components={components} 
-        theme="legacy"
-        context={gridContext}
-        defaultColDef={{ resizable: true, sortable: false, filter: false, suppressHeaderMenuButton: true }} 
-        headerHeight={headerHeight} 
-        rowHeight={50}     
-      />
-    </div>
-  );
-};
-
-export default PlanningTable;
+  // Calcul dynamique hauteur Header (Pour vue Dés
