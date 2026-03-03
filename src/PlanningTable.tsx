@@ -385,4 +385,55 @@ const PlanningTable: React.FC<any> = (props) => {
 
   const gridContext = { ...props, daysList };
 
-  // Calcul dynamique hauteur Header (Pour vue Dés
+  // Calcul dynamique hauteur Header (Pour vue Désidérata avec liste 2 colonnes)
+  const vacationCount = config && config.VACATIONS ? Object.keys(config.VACATIONS).length : 6;
+  const calculatedHeaderHeight = 45 + (Math.ceil(vacationCount / 2) * 20); 
+  const headerHeight = isDesiderataView ? Math.max(110, calculatedHeaderHeight) : 110;
+
+  const columnDefs = useMemo<ColDef[]>(() => {
+    const cols: ColDef[] = [{ 
+        field: 'Agent', headerName: 'AGENT', 
+        // ICI : Choix du header selon la vue
+        headerComponent: isDesiderataView ? 'agColumnHeaderGlobal' : 'agColumnHeaderSummary',
+        headerComponentParams: { config, context: gridContext },
+        pinned: 'left', width: 140, cellRenderer: 'agentCellRenderer', cellStyle: { backgroundColor: '#f8fafc', borderRight: '2px solid #cbd5e1', display:'flex', alignItems:'center', padding:0 } 
+    }];
+    
+    daysList.forEach(dayNum => {
+      const dayStr = safeString(dayNum);
+      let currentYear = year;
+      if (startDay > endDay && dayNum >= startDay) currentYear = year - 1; 
+      const date = new Date(currentYear, 0, dayNum); 
+      const dateStr = date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+      const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+
+      cols.push({
+        field: dayStr, width: 52, headerClass: isWeekend ? 'weekend-header' : '',
+        headerComponent: 'dayColumnHeader',
+        headerComponentParams: { displayName: date.toLocaleDateString('fr-FR', { weekday: 'short' }), dayNum: dayNum, fullDate: dateStr, config: config, context: gridContext },
+        cellRenderer: 'shiftCellRenderer',
+        cellStyle: { display: 'flex', justifyContent: 'center', alignItems: 'center', borderRight: '1px solid #cbd5e1', padding: 0, backgroundColor: isWeekend ? '#e5e7eb' : 'white' },
+        editable: false 
+      });
+    });
+    return cols; 
+  }, [year, startDay, endDay, isDesiderataView, daysList, config, gridContext]);
+
+  return (
+    <div className="ag-theme-balham" style={{ height: '100%', width: '100%', zoom: `${props.zoomLevel}%` }}>
+      <style>{`.ag-theme-balham .ag-header-cell { padding: 0 !important; } .ag-theme-balham .ag-header-cell-label { width: 100%; height: 100%; padding: 0; } .ag-theme-balham .ag-root-wrapper { border: 1px solid #94a3b8; } .ag-theme-balham .ag-header { border-bottom: 2px solid #cbd5e1; background-color: white; } .ag-theme-balham .ag-row { border-bottom-color: #cbd5e1; } .ag-theme-balham .ag-pinned-left-header { border-right: 2px solid #cbd5e1; } .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; } .ag-theme-balham .weekend-header { background-color: #e5e7eb !important; border-bottom: 1px solid #cbd5e1; }`}</style>
+      <AgGridReact 
+        rowData={data || []} 
+        columnDefs={columnDefs} 
+        components={components} 
+        theme="legacy"
+        context={gridContext}
+        defaultColDef={{ resizable: true, sortable: false, filter: false, suppressHeaderMenuButton: true }} 
+        headerHeight={headerHeight} 
+        rowHeight={50}     
+      />
+    </div>
+  );
+};
+
+export default PlanningTable;
