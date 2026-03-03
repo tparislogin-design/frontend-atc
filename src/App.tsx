@@ -36,7 +36,7 @@ const DEFAULT_CONFIG: AppConfig = {
   CONTROLEURS: ["GAO", "WBR", "PLC", "CML", "BBD", "LAK", "MZN", "TRT", "CLO", "LNN", "KGR", "FRD", "DAZ", "GNC", "DTY", "JCT"],
   CONTROLLERS_AFFECTES_BUREAU: [],
   CONTROLLERS_PARITE_STRICTE: [],
-  AGENT_WORK_RATES: {}, 
+  AGENT_WORK_RATES: {},
   VACATIONS: { 
     "M":  { debut: 5.5, fin: 12.75 },
     "J1": { debut: 7.5, fin: 15.5 },
@@ -52,7 +52,8 @@ const DEFAULT_CONFIG: AppConfig = {
     MAX_HOURS_WEEK_CALENDAR: 32,
     MAX_HOURS_7_ROLLING: 44,
     MAX_BACKTRACKS: 10,
-    SOLVER_TIME_LIMIT: 25
+    SOLVER_TIME_LIMIT: 25,
+    MAX_SHIFT_TOLERANCE: 1 // Défaut
   }
 };
 
@@ -62,10 +63,6 @@ const TimeInput = ({ val, onSave }: { val: number, onSave: (v: number) => void }
     const handleBlur = () => { onSave(timeToDecimal(displayVal)); setDisplayVal(decimalToTime(timeToDecimal(displayVal))); };
     return ( <input type="text" value={displayVal} onChange={(e) => setDisplayVal(e.target.value)} onBlur={handleBlur} onKeyDown={(e) => { if(e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} style={{ width: 50, fontSize: 12, textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: 4, padding: '4px', fontWeight: '600', color: '#1e293b', fontFamily:'monospace' }} /> );
 };
-
-// ==========================================
-// 2. COMPOSANT APP
-// ==========================================
 
 function App() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
@@ -89,7 +86,6 @@ function App() {
   const [showDesiderataMatch, setShowDesiderataMatch] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
 
-  // États Config
   const [selectedAgentConfig, setSelectedAgentConfig] = useState<string>("");
   const [newCycleOr1, setNewCycleOr1] = useState("");
   const [newCycleOr2, setNewCycleOr2] = useState("");
@@ -105,7 +101,6 @@ function App() {
     }
   }, []);
 
-  // --- CONFIG HELPERS ---
   const updateConfig = (newConfig: AppConfig) => { setConfig(newConfig); localStorage.setItem('tds_config', JSON.stringify(newConfig)); };
   const handleYearChange = (val: string) => { setYear(parseInt(val) || 2026); updateConfig({ ...config, ANNEE: parseInt(val) || 2026 }); };
   const handleContratChange = (field: keyof typeof config.CONTRAT, val: string) => { updateConfig({ ...config, CONTRAT: { ...config.CONTRAT, [field]: parseInt(val) || 0 } }); };
@@ -135,7 +130,6 @@ function App() {
       updateConfig({ ...config, CONTROLLERS_AFFECTES_BUREAU: (config.CONTROLLERS_AFFECTES_BUREAU || []).filter(a => a !== agent) });
   };
 
-  // --- GESTION CYCLES ---
   const handleAddCycle = (type: 'OR' | 'ARGENT') => {
       if (!selectedAgentConfig) return;
       const v1 = type === 'OR' ? newCycleOr1 : newCycleAg1;
@@ -145,7 +139,6 @@ function App() {
       const currentCycles = config.CYCLES || {};
       const agentCycles = currentCycles[selectedAgentConfig] || { OR: [], ARGENT: [] };
       const list = agentCycles[type] || [];
-      
       if (list.some((pair: string[]) => pair[0] === v1 && pair[1] === v2)) return;
 
       const newAgentCycles = { ...agentCycles, [type]: [...list, [v1, v2]] };
@@ -162,17 +155,14 @@ function App() {
       updateConfig({ ...config, CYCLES: { ...currentCycles, [selectedAgentConfig]: { ...agentCycles, [type]: list } } });
   };
 
-  // --- NOUVEAUX HANDLERS CONFIGURATION CYCLES ---
   const handleCycleSettingChange = (field: 'STRICT_MODE' | 'BONUS_OR' | 'BONUS_ARGENT', value: any) => {
       if (!selectedAgentConfig) return;
       const currentCycles = config.CYCLES || {};
       const agentCycles = currentCycles[selectedAgentConfig] || { OR: [], ARGENT: [] };
-      
       const newAgentCycles = { ...agentCycles, [field]: value };
       updateConfig({ ...config, CYCLES: { ...currentCycles, [selectedAgentConfig]: newAgentCycles } });
   };
 
-  // --- PARITÉ & TAUX ---
   const handleToggleParity = () => {
       if (!selectedAgentConfig) return;
       const currentList = config.CONTROLLERS_PARITE_STRICTE || [];
@@ -189,7 +179,6 @@ function App() {
       updateConfig({ ...config, AGENT_WORK_RATES: newRates });
   };
 
-  // --- DATA ---
   const handleExportConfig = () => {
       const data = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
       const a = document.createElement('a'); a.href = data; a.download = `tds_config_${year}.json`; a.click();
@@ -269,14 +258,12 @@ function App() {
 
   const gridData = activeTab === 'desiderata' ? convertPreAssignmentsToRows(preAssignments) : planning;
 
-  // --- RENDU CONFIG TAB ---
   const renderConfigTab = () => {
       const shifts = Object.keys(config.VACATIONS);
       const agentConfig = (config.CYCLES || {})[selectedAgentConfig] || { OR: [], ARGENT: [] };
       const isParity = (config.CONTROLLERS_PARITE_STRICTE || []).includes(selectedAgentConfig);
       const rate = (config.AGENT_WORK_RATES && config.AGENT_WORK_RATES[selectedAgentConfig]) || 100;
       
-      // Valeurs Cycles (avec défauts)
       const strictMode = agentConfig.STRICT_MODE || false;
       const bonusOr = agentConfig.BONUS_OR || 50;
       const bonusAg = agentConfig.BONUS_ARGENT || 10;
@@ -308,7 +295,6 @@ function App() {
                       <div style={{color:'#94a3b8', textAlign:'center', marginTop:50}}>Sélectionnez un agent à gauche.</div>
                   ) : (
                       <div>
-                          {/* EN-TÊTE CONFIG AGENT */}
                           <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:30, borderBottom:'1px solid #e2e8f0', paddingBottom:20}}>
                               <div>
                                   <h2 style={{margin:0, color:'#1e293b'}}>Config : <span style={{color:'#2563eb'}}>{selectedAgentConfig}</span></h2>
@@ -326,7 +312,6 @@ function App() {
                               </div>
                           </div>
 
-                          {/* REGLAGES CYCLES */}
                           <div style={{marginBottom:20, display:'flex', gap:20, background:'#f8fafc', padding:15, borderRadius:8, border:'1px solid #e2e8f0'}}>
                                 <label style={{display:'flex', alignItems:'center', gap:8, cursor:'pointer', flex:1}}>
                                     <input type="checkbox" checked={strictMode} onChange={(e) => handleCycleSettingChange('STRICT_MODE', e.target.checked)} />
@@ -345,7 +330,6 @@ function App() {
                                 </label>
                           </div>
 
-                          {/* SECTION OR */}
                           <div style={{marginBottom:30, background:'#fffbeb', border:'1px solid #fcd34d', borderRadius:8, padding:20}}>
                               <h3 style={{marginTop:0, color:'#b45309', fontSize:14}}>🥇 Séquences OR</h3>
                               <div style={{display:'flex', gap:10, marginBottom:15, alignItems:'center'}}>
@@ -363,7 +347,6 @@ function App() {
                               </div>
                           </div>
 
-                          {/* SECTION ARGENT */}
                           <div style={{background:'#f8fafc', border:'1px solid #cbd5e1', borderRadius:8, padding:20}}>
                               <h3 style={{marginTop:0, color:'#475569', fontSize:14}}>🥈 Séquences ARGENT</h3>
                               <div style={{display:'flex', gap:10, marginBottom:15, alignItems:'center'}}>
@@ -466,6 +449,10 @@ function App() {
                         <div style={rowStyle}><label style={labelStyle}>Jour Début</label><input type="number" value={startDay} onChange={e=>setStartDay(Number(e.target.value))} style={numberInputStyle}/></div>
                         <div style={rowStyle}><label style={labelStyle}>Jour Fin</label><input type="number" value={endDay} onChange={e=>setEndDay(Number(e.target.value))} style={numberInputStyle}/></div>
                         <div style={{height:1, background:'#f1f5f9', margin:'10px 0'}}></div>
+                        
+                        {/* NOUVEAU PARAMÈTRE TOLERANCE */}
+                        <div style={rowStyle}><label style={labelStyle}>Tolérance Cible</label><input type="number" value={config.CONTRAT.MAX_SHIFT_TOLERANCE} onChange={e=>handleContratChange('MAX_SHIFT_TOLERANCE', e.target.value)} style={{...numberInputStyle, color:'#d97706'}} /></div>
+                        
                         <div style={rowStyle}><label style={labelStyle}>Temps Limite (sec)</label><input type="number" value={config.CONTRAT.SOLVER_TIME_LIMIT || 25} onChange={e=>handleContratChange('SOLVER_TIME_LIMIT', e.target.value)} style={{...numberInputStyle, color:'#3b82f6', fontWeight:'bold'}} /></div>
                         <div style={rowStyle}><label style={labelStyle}>Max Heures (7j glissants)</label><input type="number" value={config.CONTRAT.MAX_HOURS_7_ROLLING} onChange={e=>handleContratChange('MAX_HOURS_7_ROLLING', e.target.value)} style={numberInputStyle} /></div>
                         <div style={rowStyle}><label style={labelStyle}>Max Heures (Sem. Civile)</label><input type="number" value={config.CONTRAT.MAX_HOURS_WEEK_CALENDAR} onChange={e=>handleContratChange('MAX_HOURS_WEEK_CALENDAR', e.target.value)} style={numberInputStyle} /></div>

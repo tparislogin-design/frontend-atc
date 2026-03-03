@@ -14,10 +14,9 @@ export interface AppConfig {
     [agentName: string]: {
       OR: string[][];
       ARGENT: string[][];
-      // NOUVEAUX CHAMPS
-      STRICT_MODE?: boolean; // Force le respect des cycles uniquement
-      BONUS_OR?: number;     // Points personnalisés (défaut 50)
-      BONUS_ARGENT?: number; // Points personnalisés (défaut 10)
+      STRICT_MODE?: boolean;
+      BONUS_OR?: number;
+      BONUS_ARGENT?: number;
     };
   };
   CONTRAT: {
@@ -29,5 +28,6 @@ export interface AppConfig {
     SOLVER_TIME_LIMIT?: number;
     BUFFER_DAYS?: number;
     REQUIRE_2_CONSECUTIVE_REST_DAYS?: boolean;
+    MAX_SHIFT_TOLERANCE?: number; // <--- NOUVEAU
   };
 }
