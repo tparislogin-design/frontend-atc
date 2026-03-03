@@ -37,6 +37,7 @@ const DEFAULT_CONFIG: AppConfig = {
   CONTROLLERS_AFFECTES_BUREAU: [],
   CONTROLLERS_PARITE_STRICTE: [],
   AGENT_WORK_RATES: {},
+  AGENT_BALANCES: {},
   VACATIONS: { 
     "M":  { debut: 5.5, fin: 12.75 },
     "J1": { debut: 7.5, fin: 15.5 },
@@ -53,7 +54,9 @@ const DEFAULT_CONFIG: AppConfig = {
     MAX_HOURS_7_ROLLING: 44,
     MAX_BACKTRACKS: 10,
     SOLVER_TIME_LIMIT: 25,
-    MAX_SHIFT_TOLERANCE: 1
+    MAX_SHIFT_TOLERANCE: 1, // Tolérance par défaut (+1 jour autorisé)
+    BUFFER_DAYS: 4,
+    REQUIRE_2_CONSECUTIVE_REST_DAYS: true
   }
 };
 
@@ -65,12 +68,13 @@ const TimeInput = ({ val, onSave }: { val: number, onSave: (v: number) => void }
 };
 
 // ==========================================
-// 2. COMPOSANT APP
+// 2. COMPOSANT PRINCIPAL APP
 // ==========================================
 
 function App() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   
+  // États App
   const [year, setYear] = useState(2026);
   const [startDay, setStartDay] = useState(1); 
   const [endDay, setEndDay] = useState(28);
@@ -80,7 +84,7 @@ function App() {
   const [planning, setPlanning] = useState<any[]>([]);
   
   const [softConstraints, setSoftConstraints] = useState<Set<string>>(new Set());
-  const [hideOff, setHideOff] = useState(true);
+  const [hideOff, setHideOff] = useState(true); // Masqué par défaut
   const [optionalCoverage, setOptionalCoverage] = useState<Record<string, string[]>>({});
 
   const [loading, setLoading] = useState(false);
@@ -136,6 +140,7 @@ function App() {
       updateConfig({ ...config, CONTROLLERS_AFFECTES_BUREAU: (config.CONTROLLERS_AFFECTES_BUREAU || []).filter(a => a !== agent) });
   };
 
+  // --- GESTION CYCLES ---
   const handleAddCycle = (type: 'OR' | 'ARGENT') => {
       if (!selectedAgentConfig) return;
       const v1 = type === 'OR' ? newCycleOr1 : newCycleAg1;
@@ -145,6 +150,7 @@ function App() {
       const currentCycles = config.CYCLES || {};
       const agentCycles = currentCycles[selectedAgentConfig] || { OR: [], ARGENT: [] };
       const list = agentCycles[type] || [];
+      
       if (list.some((pair: string[]) => pair[0] === v1 && pair[1] === v2)) return;
 
       const newAgentCycles = { ...agentCycles, [type]: [...list, [v1, v2]] };
@@ -169,6 +175,7 @@ function App() {
       updateConfig({ ...config, CYCLES: { ...currentCycles, [selectedAgentConfig]: newAgentCycles } });
   };
 
+  // --- PARITÉ & TAUX & BALANCE ---
   const handleToggleParity = () => {
       if (!selectedAgentConfig) return;
       const currentList = config.CONTROLLERS_PARITE_STRICTE || [];
@@ -183,6 +190,18 @@ function App() {
       const val = parseInt(rate);
       const newRates = { ...config.AGENT_WORK_RATES, [selectedAgentConfig]: isNaN(val) ? 100 : val };
       updateConfig({ ...config, AGENT_WORK_RATES: newRates });
+  };
+
+  // AJUSTEMENT MANUEL DU RELIQUAT (BALANCE)
+  const handleUpdateBalance = (agent: string, value: number) => {
+      const currentBalances = config.AGENT_BALANCES || {};
+      if (value === 0) {
+          const newBalances = { ...currentBalances };
+          delete newBalances[agent];
+          updateConfig({ ...config, AGENT_BALANCES: newBalances });
+      } else {
+          updateConfig({ ...config, AGENT_BALANCES: { ...currentBalances, [agent]: value } });
+      }
   };
 
   // --- DATA ---
@@ -261,16 +280,13 @@ function App() {
           if (res.data.data) { 
               let generatedPlanning = res.data.data;
 
-              // --- LOGIQUE DE TRI ---
-              // On respecte l'ordre des Désidérata (preAssignments)
+              // TRI PAR ORDRE DU FICHIER DESIDERATA
               const desiredOrder = Object.keys(preAssignments);
-              
-              // Si preAssignments existe, on trie le planning
               if (desiredOrder.length > 0) {
                   generatedPlanning.sort((a: any, b: any) => {
                       const idxA = desiredOrder.indexOf(a.Agent);
                       const idxB = desiredOrder.indexOf(b.Agent);
-                      // Gestion de sécurité si un agent n'est pas trouvé (on met à la fin)
+                      // Sécurité : si non trouvé, on met à la fin
                       const safeIdxA = idxA === -1 ? 9999 : idxA;
                       const safeIdxB = idxB === -1 ? 9999 : idxB;
                       return safeIdxA - safeIdxB;
@@ -438,6 +454,7 @@ function App() {
                             zoomLevel={zoomLevel} hideOff={hideOff}
                             optionalCoverage={optionalCoverage} onToggleOptionalCoverage={handleToggleOptionalCoverage}
                             onToggleGlobalOptional={handleToggleGlobalOptional}
+                            onUpdateBalance={handleUpdateBalance}
                         />
                     )}
                     {activeTab === 'bilan' && <Bilan planning={planning} config={config} year={year} startDay={startDay} endDay={endDay} />}
@@ -480,7 +497,6 @@ function App() {
                         <div style={rowStyle}><label style={labelStyle}>Jour Fin</label><input type="number" value={endDay} onChange={e=>setEndDay(Number(e.target.value))} style={numberInputStyle}/></div>
                         <div style={{height:1, background:'#f1f5f9', margin:'10px 0'}}></div>
                         
-                        {/* NOUVEAU PARAMÈTRE TOLERANCE */}
                         <div style={rowStyle}><label style={labelStyle}>Tolérance Cible</label><input type="number" value={config.CONTRAT.MAX_SHIFT_TOLERANCE || 1} onChange={e=>handleContratChange('MAX_SHIFT_TOLERANCE', e.target.value)} style={{...numberInputStyle, color:'#d97706'}} /></div>
                         
                         <div style={rowStyle}><label style={labelStyle}>Temps Limite (sec)</label><input type="number" value={config.CONTRAT.SOLVER_TIME_LIMIT || 25} onChange={e=>handleContratChange('SOLVER_TIME_LIMIT', e.target.value)} style={{...numberInputStyle, color:'#3b82f6', fontWeight:'bold'}} /></div>

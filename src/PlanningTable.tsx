@@ -19,10 +19,8 @@ const GlobalHeader = (props: any) => {
     const { config, context } = props;
     const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
     
-    // Récupération de TOUTES les vacations
     const allShifts = config && config.VACATIONS ? Object.keys(config.VACATIONS) : ['M', 'J1', 'J3'];
     
-    // Tri chronologique
     allShifts.sort((a: string, b: string) => {
         const startA = config?.VACATIONS[a]?.debut || 0;
         const startB = config?.VACATIONS[b]?.debut || 0;
@@ -40,17 +38,16 @@ const GlobalHeader = (props: any) => {
             <div style={{fontSize: 10, fontWeight: '800', color: '#64748b', textTransform:'uppercase', flexShrink: 0}}>GLOBAL</div>
             <div style={{fontSize: 9, color: '#94a3b8', fontStyle:'italic', marginBottom: 4, flexShrink: 0}}>1-Clic</div>
             
-            {/* ICI : GRILLE 2 COLONNES */}
             <div style={{
                 display: 'grid',
-                gridTemplateColumns: '1fr 1fr', // 2 colonnes égales
+                gridTemplateColumns: '1fr 1fr', 
                 columnGap: '2px', 
                 rowGap: '2px',    
                 width: '100%', 
                 padding: '0 2px',
                 boxSizing: 'border-box',
                 paddingBottom: 4,
-                overflowY: 'auto' // Scroll si nécessaire
+                overflowY: 'auto'
             }}>
                 {allShifts.map((code: string, idx: number) => {
                     let isOptionalEverywhere = false;
@@ -67,7 +64,7 @@ const GlobalHeader = (props: any) => {
                                 title={`Rendre ${code} optionnel/obligatoire pour TOUT le mois`} 
                                 style={{ 
                                     fontSize: 10, color: color, fontWeight: '700', 
-                                    cursor: 'pointer', padding: '2px',
+                                    cursor: 'pointer', padding: '1px 2px',
                                     border: '1px solid #e2e8f0', borderRadius: '4px',
                                     backgroundColor: '#fff',
                                     width: '100%', textAlign: 'center'
@@ -113,7 +110,6 @@ const SummaryHeader = (props: any) => {
         });
     }
 
-    // Bordures explicites
     const boxStyle: React.CSSProperties = {
         display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', 
         width:'100%', height:'100%', padding: '4px', background:'#fff', 
@@ -142,10 +138,7 @@ const SummaryHeader = (props: any) => {
     return (
         <div style={boxStyle}>
             <div style={{fontSize: 9, fontWeight: '800', color: '#64748b', marginBottom: 4, textTransform:'uppercase'}}>MANQUANTS</div>
-            
-            {summary.length === 0 ? (
-                <div style={{fontSize: 20}}>✅</div>
-            ) : (
+            {summary.length === 0 ? <div style={{fontSize: 20}}>✅</div> : (
                 <div style={{textAlign:'center', lineHeight:'1.2', fontSize: 10, fontWeight:'600', color:'#ef4444', overflowY:'auto', maxHeight:'80px', width:'100%'}}>
                     {summary.map(([shift, count], idx) => (
                         <span key={shift}>
@@ -236,7 +229,7 @@ const CustomHeader = (props: any) => {
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
     const rowData = props.data;
-    const { daysList, config, preAssignments, isDesiderataView, softConstraints } = props.context || {}; 
+    const { daysList, config, preAssignments, isDesiderataView, softConstraints, onUpdateBalance } = props.context || {}; 
 
     const normalize = (v: any) => {
         const s = safeString(v).trim().toUpperCase();
@@ -245,7 +238,6 @@ const AgentCellRenderer = (props: any) => {
     };
 
     let worked = 0; let leaves = 0; let refusedCount = 0; let softCount = 0;
-
     if (daysList && rowData && config) {
         daysList.forEach((dayNum: number) => {
             const dayStr = safeString(dayNum);
@@ -272,11 +264,25 @@ const AgentCellRenderer = (props: any) => {
 
     const totalDays = daysList ? daysList.length : 0;
     const workRate = (config?.AGENT_WORK_RATES && config.AGENT_WORK_RATES[agentName]) || 100;
-    const target = Math.ceil((workRate / 100) * (totalDays - leaves) / 2);
+    const baseTarget = Math.ceil((workRate / 100) * (totalDays - leaves) / 2);
     
-    const statsColor = isDesiderataView ? '#64748b' : (worked >= (target - 1) ? '#16a34a' : '#ea580c');
+    // GESTION BALANCE
+    const balance = (config?.AGENT_BALANCES && config.AGENT_BALANCES[agentName]) || 0;
+    const finalTarget = baseTarget + balance;
+    
+    const statsColor = isDesiderataView ? '#64748b' : (worked >= (finalTarget - 1) ? '#16a34a' : '#ea580c');
     const isBureau = (config?.CONTROLLERS_AFFECTES_BUREAU || []).includes(agentName);
     const nameStyle = { fontWeight: '800', fontSize: 13, color: isBureau ? '#2563eb' : '#334155' };
+
+    const handleBalanceClick = (e: React.MouseEvent) => {
+        if (!isDesiderataView || !onUpdateBalance) return;
+        e.stopPropagation();
+        const newVal = prompt(`Ajustement manuel pour ${agentName} (Reliquat) ?\n(Ex: -2 pour travailler moins, 1 pour travailler plus)`, balance.toString());
+        if (newVal !== null) {
+            const num = parseInt(newVal, 10);
+            if (!isNaN(num)) onUpdateBalance(agentName, num);
+        }
+    };
 
     return (
         <div style={{display:'flex', flexDirection:'column', justifyContent:'center', height:'100%', paddingLeft: 8}}>
@@ -288,7 +294,21 @@ const AgentCellRenderer = (props: any) => {
                 </span>
             </div>
             <div style={{display:'flex', alignItems:'center', gap: 8, marginTop: 2}}>
-                <div style={{fontSize: 10, color: statsColor, fontWeight: 700}}>{worked} <span style={{color:'#cbd5e1', fontWeight:400}}>/</span> {target}</div>
+                <div style={{fontSize: 10, color: statsColor, fontWeight: 700}}>
+                    {worked} <span style={{color:'#cbd5e1', fontWeight:400}}>/</span> 
+                    <span 
+                        onClick={handleBalanceClick}
+                        title={isDesiderataView ? "Clic pour ajuster le reliquat" : ""}
+                        style={{
+                            cursor: isDesiderataView ? 'pointer' : 'default',
+                            borderBottom: isDesiderataView ? '1px dotted #94a3b8' : 'none',
+                            marginLeft: 2
+                        }}
+                    >
+                        {finalTarget}
+                        {balance !== 0 && <span style={{fontSize:9, marginLeft:2, color: balance > 0 ? '#16a34a' : '#ef4444'}}>({balance > 0 ? '+' : ''}{balance})</span>}
+                    </span>
+                </div>
                 
                 {isDesiderataView ? (
                     softCount > 0 && (
@@ -322,7 +342,6 @@ const ShiftCellRenderer = (props: any) => {
     };
 
     const displayVal = normalize(rawVal);
-    
     if (displayVal === '') return null;
 
     const dayStr = safeString(dayNum);
@@ -339,10 +358,7 @@ const ShiftCellRenderer = (props: any) => {
 
     const getBorderStyle = () => {
         if (isDesiderataView) return isSoft ? '2px solid #9333ea' : '1px solid #cbd5e1';
-        if (showDesiderataMatch && hasRequest) {
-            if (isMatch) return '2px solid #16a34a'; // Vert
-            return '2px solid #ef4444'; // Rouge
-        }
+        if (showDesiderataMatch && hasRequest) return isMatch ? '2px solid #16a34a' : '2px solid #ef4444';
         return `1px solid ${style.border}`;
     };
 
@@ -399,7 +415,26 @@ const ShiftCellRenderer = (props: any) => {
 };
 
 // --- 6. MAIN ---
-const PlanningTable: React.FC<any> = (props) => {
+interface PlanningTableProps {
+  data: any[];
+  year: number;
+  startDay: number;
+  endDay: number;
+  config: any;
+  isDesiderataView?: boolean;
+  preAssignments?: any;
+  showDesiderataMatch?: boolean;
+  zoomLevel?: number;
+  softConstraints?: Set<string>;
+  onToggleSoft?: (agent: string, day: number) => void;
+  hideOff?: boolean;
+  optionalCoverage?: Record<string, string[]>;
+  onToggleOptionalCoverage?: (day: number, shift: string) => void;
+  onToggleGlobalOptional?: (shift: string) => void;
+  onUpdateBalance?: (agent: string, val: number) => void;
+}
+
+const PlanningTable: React.FC<PlanningTableProps> = (props) => {
   const { data, year, startDay, endDay, config, isDesiderataView } = props;
 
   const components = useMemo(() => ({
@@ -417,9 +452,10 @@ const PlanningTable: React.FC<any> = (props) => {
     return list;
   }, [startDay, endDay]);
 
+  // ON RECRÉE LE CONTEXTE COMPLET POUR AG GRID
   const gridContext = { ...props, daysList };
 
-  // Calcul dynamique hauteur Header (Pour vue Désidérata avec liste 2 colonnes)
+  // Calcul dynamique hauteur Header
   const vacationCount = config && config.VACATIONS ? Object.keys(config.VACATIONS).length : 6;
   const calculatedHeaderHeight = 45 + (Math.ceil(vacationCount / 2) * 20); 
   const headerHeight = isDesiderataView ? Math.max(110, calculatedHeaderHeight) : 110;
@@ -427,6 +463,7 @@ const PlanningTable: React.FC<any> = (props) => {
   const columnDefs = useMemo<ColDef[]>(() => {
     const cols: ColDef[] = [{ 
         field: 'Agent', headerName: 'AGENT', 
+        // HEADER INTELLIGENT
         headerComponent: isDesiderataView ? 'agColumnHeaderGlobal' : 'agColumnHeaderSummary',
         headerComponentParams: { config, context: gridContext },
         pinned: 'left', width: 140, cellRenderer: 'agentCellRenderer', cellStyle: { backgroundColor: '#f8fafc', borderRight: '2px solid #cbd5e1', display:'flex', alignItems:'center', padding:0 } 
