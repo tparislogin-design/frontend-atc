@@ -14,12 +14,11 @@ const safeString = (val: any): string => {
     return String(val);
 };
 
-// --- 1. HEADER GLOBAL (Vue Désidérata - 2 COLONNES) ---
+// --- 1. HEADER GLOBAL (Vue Désidérata) ---
 const GlobalHeader = (props: any) => {
     const { config, context } = props;
     const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
     
-    // Récupération de TOUTES les vacations
     const allShifts = config && config.VACATIONS ? Object.keys(config.VACATIONS) : ['M', 'J1', 'J3'];
     
     // Tri chronologique
@@ -40,17 +39,9 @@ const GlobalHeader = (props: any) => {
             <div style={{fontSize: 10, fontWeight: '800', color: '#64748b', textTransform:'uppercase', flexShrink: 0}}>GLOBAL</div>
             <div style={{fontSize: 9, color: '#94a3b8', fontStyle:'italic', marginBottom: 4, flexShrink: 0}}>1-Clic</div>
             
-            {/* CORRECTION ICI : Affichage en GRILLE 2 COLONNES */}
             <div style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr', // 2 colonnes égales
-                columnGap: '2px', // Espacement horizontal
-                rowGap: '2px',    // Espacement vertical
-                width: '100%', 
-                padding: '0 4px',
-                boxSizing: 'border-box',
-                paddingBottom: 4,
-                overflowY: 'auto'
+                display:'flex', flexDirection:'column', gap: 1, 
+                overflowY: 'auto', width: '100%', flex: 1, paddingBottom: 4
             }}>
                 {allShifts.map((code: string, idx: number) => {
                     let isOptionalEverywhere = false;
@@ -61,17 +52,11 @@ const GlobalHeader = (props: any) => {
                     }
                     const color = isOptionalEverywhere ? '#2563eb' : '#ef4444';
                     return (
-                        <div key={idx} style={{display:'flex', justifyContent:'center', alignItems:'center'}}>
+                        <div key={idx} style={{display:'flex', justifyContent:'center', minHeight: '12px'}}>
                             <span 
                                 onClick={(e) => { e.stopPropagation(); onToggleGlobalOptional(code); }} 
                                 title={`Rendre ${code} optionnel/obligatoire pour TOUT le mois`} 
-                                style={{ 
-                                    fontSize: 10, color: color, fontWeight: '700', 
-                                    cursor: 'pointer', padding: '2px 4px',
-                                    border: '1px solid #e2e8f0', borderRadius: '4px', // Petit cadre pour bien distinguer
-                                    backgroundColor: '#fff',
-                                    width: '100%', textAlign: 'center'
-                                }}
+                                style={{ fontSize: 10, color: color, fontWeight: '700', cursor: 'pointer', padding: '1px 4px' }}
                             >
                                 {code}
                             </span>
@@ -115,11 +100,12 @@ const SummaryHeader = (props: any) => {
         });
     }
 
+    // Bordures explicites
     const boxStyle: React.CSSProperties = {
         display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', 
         width:'100%', height:'100%', padding: '4px', background:'#fff', 
-        borderRight:'1px solid #bdc3c7', 
-        borderBottom:'1px solid #bdc3c7', 
+        borderRight:'1px solid #cbd5e1', 
+        borderBottom:'1px solid #cbd5e1', 
         boxSizing: 'border-box'
     };
 
@@ -179,7 +165,9 @@ const CustomHeader = (props: any) => {
     });
 
     let indicatorColor = 'transparent'; 
-    if (missingShifts.length > 0) {
+    // CORRECTION : On n'affiche pas de bordure rouge en bas si on est en mode Désidérata
+    // car on est en train de configurer, pas de constater un manque.
+    if (missingShifts.length > 0 && !isDesiderataView) {
         const dayStr = safeString(dayNum);
         const areAllOptional = missingShifts.every(code => optionalCoverage && optionalCoverage[dayStr]?.includes(code));
         indicatorColor = areAllOptional ? '#2563eb' : '#ef4444'; 
@@ -191,7 +179,8 @@ const CustomHeader = (props: any) => {
             paddingTop: 4, paddingBottom: 2, boxSizing:'border-box',
             borderRight: '1px solid #bdc3c7', 
             borderBottom: `1px solid #bdc3c7`, 
-            background: missingShifts.length > 0 ? '#fff' : '#f0fdf4',
+            // CORRECTION : Pas de fond vert en mode désidérata
+            background: (missingShifts.length > 0 || isDesiderataView) ? '#fff' : '#f0fdf4',
             position: 'relative'
         }}>
             <div style={{lineHeight: '1.1', textAlign:'center', marginBottom: 2}}>
@@ -237,7 +226,7 @@ const CustomHeader = (props: any) => {
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
     const rowData = props.data;
-    const { daysList, config, preAssignments } = props.context || {}; 
+    const { daysList, config, preAssignments, isDesiderataView } = props.context || {}; 
 
     const normalize = (v: any) => {
         const s = safeString(v).trim().toUpperCase();
@@ -250,12 +239,17 @@ const AgentCellRenderer = (props: any) => {
         daysList.forEach((dayNum: number) => {
             const dayStr = safeString(dayNum);
             const actualCode = normalize(rowData[dayStr]);
+
             if (actualCode && actualCode !== '' && actualCode !== 'OFF') {
-                if (actualCode === 'C') leaves++;
-                else if (config.VACATIONS[actualCode] !== undefined) worked++;
-                else leaves++; 
+                if (actualCode === 'C') {
+                    leaves++;
+                } else {
+                    worked++;
+                }
             }
-            if (preAssignments && preAssignments[agentName]) {
+
+            // CORRECTION ICI : Pas de calcul de refus si on est en Vue Désidérata
+            if (!isDesiderataView && preAssignments && preAssignments[agentName]) {
                 const req = preAssignments[agentName][dayStr];
                 if (req) {
                     const allowed = safeString(req).split(/[,/ ]+/).map((s: string) => normalize(s)).filter((s: string) => s !== '');
@@ -264,21 +258,33 @@ const AgentCellRenderer = (props: any) => {
             }
         });
     }
+
     const totalDays = daysList ? daysList.length : 0;
     const workRate = (config?.AGENT_WORK_RATES && config.AGENT_WORK_RATES[agentName]) || 100;
     const target = Math.ceil((workRate / 100) * (totalDays - leaves) / 2);
-    const statsColor = worked >= (target - 1) ? '#16a34a' : '#ea580c';
+    
+    // Pas de couleur de stats (rouge/vert) en mode désidérata, on reste neutre
+    const statsColor = isDesiderataView ? '#64748b' : (worked >= (target - 1) ? '#16a34a' : '#ea580c');
+    
     const isBureau = (config?.CONTROLLERS_AFFECTES_BUREAU || []).includes(agentName);
     const nameStyle = { fontWeight: '800', fontSize: 13, color: isBureau ? '#2563eb' : '#334155' };
 
     return (
         <div style={{display:'flex', flexDirection:'column', justifyContent:'center', height:'100%', paddingLeft: 8}}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <span style={nameStyle}>{agentName} {isBureau && ' 🏢'} {workRate < 100 && <span style={{fontSize:10, color:'#ef4444', marginLeft:4}}>{workRate}%</span>}</span>
+                <span style={nameStyle}>
+                    {agentName} 
+                    {isBureau && ' 🏢'}
+                    {workRate < 100 && <span style={{fontSize:10, color:'#ef4444', marginLeft:4}}>{workRate}%</span>}
+                </span>
             </div>
             <div style={{display:'flex', alignItems:'center', gap: 8, marginTop: 2}}>
                 <div style={{fontSize: 10, color: statsColor, fontWeight: 700}}>{worked} <span style={{color:'#cbd5e1', fontWeight:400}}>/</span> {target}</div>
-                {refusedCount > 0 && ( <div title={`${refusedCount} demande(s) non respectée(s)`} style={{fontSize: 9, color: '#ef4444', fontWeight: '800', background: '#fee2e2', padding: '1px 4px', borderRadius: '4px', border: '1px solid #fca5a5'}}>{refusedCount} ⚠️</div> )}
+                {refusedCount > 0 && ( 
+                    <div title={`${refusedCount} demande(s) non respectée(s)`} style={{fontSize: 9, color: '#ef4444', fontWeight: '800', background: '#fee2e2', padding: '1px 4px', borderRadius: '4px', border: '1px solid #fca5a5'}}>
+                        {refusedCount} ⚠️
+                    </div> 
+                )}
             </div>
         </div>
     );
@@ -298,6 +304,7 @@ const ShiftCellRenderer = (props: any) => {
     };
 
     const displayVal = normalize(rawVal);
+    
     if (displayVal === '') return null;
 
     const dayStr = safeString(dayNum);
@@ -314,7 +321,10 @@ const ShiftCellRenderer = (props: any) => {
 
     const getBorderStyle = () => {
         if (isDesiderataView) return isSoft ? '2px solid #9333ea' : '1px solid #cbd5e1';
-        if (showDesiderataMatch && hasRequest) return isMatch ? '2px solid #16a34a' : '2px solid #ef4444';
+        if (showDesiderataMatch && hasRequest) {
+            if (isMatch) return '2px solid #16a34a'; // Vert
+            return '2px solid #ef4444'; // Rouge
+        }
         return `1px solid ${style.border}`;
     };
 
@@ -346,7 +356,10 @@ const ShiftCellRenderer = (props: any) => {
     }
 
     const handleContextMenu = (e: React.MouseEvent) => {
-        if (isDesiderataView && onToggleSoft) { e.preventDefault(); onToggleSoft(agentName, dayNum); }
+        if (isDesiderataView && onToggleSoft) {
+            e.preventDefault(); 
+            onToggleSoft(agentName, dayNum);
+        }
     };
 
     let tooltip = undefined;
@@ -362,8 +375,34 @@ const ShiftCellRenderer = (props: any) => {
     const isPurple = finalBorder.includes('#9333ea');
 
     return (
-        <div onContextMenu={handleContextMenu} title={tooltip} style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', width: '100%', cursor: isDesiderataView ? 'context-menu' : 'default'}}>
-            <span style={{backgroundColor: style.bg, color: style.color, border: finalBorder, borderRadius: '6px', padding: (isRed || isGreen || isPurple) ? '1px 0' : '2px 0', fontSize: '10px', fontWeight: '700', width: '34px', textAlign: 'center', boxShadow: isRed ? '0 0 4px rgba(239, 68, 68, 0.5)' : (isGreen ? '0 0 4px rgba(22, 163, 74, 0.5)' : (isPurple ? '0 0 4px rgba(147, 51, 234, 0.5)' : 'none')), display: 'inline-block', transform: (isRed || isGreen || isPurple) ? 'scale(1.05)' : 'scale(1)', transition: 'all 0.1s'}}>
+        <div 
+            onContextMenu={handleContextMenu}
+            title={tooltip}
+            style={{
+                display: 'flex', justifyContent: 'center', alignItems: 'center', 
+                height: '100%', width: '100%', 
+                cursor: isDesiderataView ? 'context-menu' : 'default'
+            }}
+        >
+            <span style={{
+                backgroundColor: style.bg, 
+                color: style.color, 
+                border: finalBorder,
+                borderRadius: '6px', 
+                padding: (isRed || isGreen || isPurple) ? '1px 0' : '2px 0', 
+                fontSize: '10px', 
+                fontWeight: '700',
+                width: '34px',
+                textAlign: 'center', 
+                boxShadow: isRed 
+                    ? '0 0 4px rgba(239, 68, 68, 0.5)' 
+                    : (isGreen 
+                        ? '0 0 4px rgba(22, 163, 74, 0.5)'
+                        : (isPurple ? '0 0 4px rgba(147, 51, 234, 0.5)' : 'none')),
+                display: 'inline-block',
+                transform: (isRed || isGreen || isPurple) ? 'scale(1.05)' : 'scale(1)',
+                transition: 'all 0.1s'
+            }}>
                 {displayVal}
             </span>
         </div>
@@ -391,10 +430,9 @@ const PlanningTable: React.FC<any> = (props) => {
 
   const gridContext = { ...props, daysList };
 
-  // CALCUL DYNAMIQUE HAUTEUR HEADER (Ajusté pour 2 colonnes)
+  // CALCUL DYNAMIQUE HAUTEUR HEADER
   const vacationCount = config && config.VACATIONS ? Object.keys(config.VACATIONS).length : 6;
-  // Hauteur de base + (Nombre lignes * hauteur) - Divisé par 2 colonnes
-  const calculatedHeaderHeight = 45 + (Math.ceil(vacationCount / 2) * 20); 
+  const calculatedHeaderHeight = 45 + (Math.ceil(vacationCount / 2) * 20); // 2 colonnes
   const headerHeight = isDesiderataView ? Math.max(110, calculatedHeaderHeight) : 110;
 
   const columnDefs = useMemo<ColDef[]>(() => {
