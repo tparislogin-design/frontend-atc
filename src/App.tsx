@@ -53,7 +53,7 @@ const DEFAULT_CONFIG: AppConfig = {
     MAX_HOURS_7_ROLLING: 44,
     MAX_BACKTRACKS: 10,
     SOLVER_TIME_LIMIT: 25,
-    MAX_SHIFT_TOLERANCE: 1 // Défaut
+    MAX_SHIFT_TOLERANCE: 1
   }
 };
 
@@ -63,6 +63,10 @@ const TimeInput = ({ val, onSave }: { val: number, onSave: (v: number) => void }
     const handleBlur = () => { onSave(timeToDecimal(displayVal)); setDisplayVal(decimalToTime(timeToDecimal(displayVal))); };
     return ( <input type="text" value={displayVal} onChange={(e) => setDisplayVal(e.target.value)} onBlur={handleBlur} onKeyDown={(e) => { if(e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} style={{ width: 50, fontSize: 12, textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: 4, padding: '4px', fontWeight: '600', color: '#1e293b', fontFamily:'monospace' }} /> );
 };
+
+// ==========================================
+// 2. COMPOSANT APP
+// ==========================================
 
 function App() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
@@ -86,6 +90,7 @@ function App() {
   const [showDesiderataMatch, setShowDesiderataMatch] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
 
+  // États Config
   const [selectedAgentConfig, setSelectedAgentConfig] = useState<string>("");
   const [newCycleOr1, setNewCycleOr1] = useState("");
   const [newCycleOr2, setNewCycleOr2] = useState("");
@@ -101,6 +106,7 @@ function App() {
     }
   }, []);
 
+  // --- CONFIG HELPERS ---
   const updateConfig = (newConfig: AppConfig) => { setConfig(newConfig); localStorage.setItem('tds_config', JSON.stringify(newConfig)); };
   const handleYearChange = (val: string) => { setYear(parseInt(val) || 2026); updateConfig({ ...config, ANNEE: parseInt(val) || 2026 }); };
   const handleContratChange = (field: keyof typeof config.CONTRAT, val: string) => { updateConfig({ ...config, CONTRAT: { ...config.CONTRAT, [field]: parseInt(val) || 0 } }); };
@@ -179,6 +185,7 @@ function App() {
       updateConfig({ ...config, AGENT_WORK_RATES: newRates });
   };
 
+  // --- DATA ---
   const handleExportConfig = () => {
       const data = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
       const a = document.createElement('a'); a.href = data; a.download = `tds_config_${year}.json`; a.click();
@@ -250,7 +257,30 @@ function App() {
               soft_assignments: Array.from(softConstraints),
               optional_coverage: optionalCoverage
           });
-          if (res.data.data) { setPlanning(res.data.data); setStatus({type:'success', msg:'Généré !'}); setActiveTab('planning'); }
+          
+          if (res.data.data) { 
+              let generatedPlanning = res.data.data;
+
+              // --- LOGIQUE DE TRI ---
+              // On respecte l'ordre des Désidérata (preAssignments)
+              const desiredOrder = Object.keys(preAssignments);
+              
+              // Si preAssignments existe, on trie le planning
+              if (desiredOrder.length > 0) {
+                  generatedPlanning.sort((a: any, b: any) => {
+                      const idxA = desiredOrder.indexOf(a.Agent);
+                      const idxB = desiredOrder.indexOf(b.Agent);
+                      // Gestion de sécurité si un agent n'est pas trouvé (on met à la fin)
+                      const safeIdxA = idxA === -1 ? 9999 : idxA;
+                      const safeIdxB = idxB === -1 ? 9999 : idxB;
+                      return safeIdxA - safeIdxB;
+                  });
+              }
+
+              setPlanning(generatedPlanning); 
+              setStatus({type:'success', msg:'Généré !'}); 
+              setActiveTab('planning'); 
+          }
           else setStatus({type:'error', msg:'Infeasible'});
       } catch(e) { setStatus({type:'error', msg:'Erreur API'}); }
       finally { setLoading(false); }
@@ -451,7 +481,7 @@ function App() {
                         <div style={{height:1, background:'#f1f5f9', margin:'10px 0'}}></div>
                         
                         {/* NOUVEAU PARAMÈTRE TOLERANCE */}
-                        <div style={rowStyle}><label style={labelStyle}>Tolérance Cible</label><input type="number" value={config.CONTRAT.MAX_SHIFT_TOLERANCE} onChange={e=>handleContratChange('MAX_SHIFT_TOLERANCE', e.target.value)} style={{...numberInputStyle, color:'#d97706'}} /></div>
+                        <div style={rowStyle}><label style={labelStyle}>Tolérance Cible</label><input type="number" value={config.CONTRAT.MAX_SHIFT_TOLERANCE || 1} onChange={e=>handleContratChange('MAX_SHIFT_TOLERANCE', e.target.value)} style={{...numberInputStyle, color:'#d97706'}} /></div>
                         
                         <div style={rowStyle}><label style={labelStyle}>Temps Limite (sec)</label><input type="number" value={config.CONTRAT.SOLVER_TIME_LIMIT || 25} onChange={e=>handleContratChange('SOLVER_TIME_LIMIT', e.target.value)} style={{...numberInputStyle, color:'#3b82f6', fontWeight:'bold'}} /></div>
                         <div style={rowStyle}><label style={labelStyle}>Max Heures (7j glissants)</label><input type="number" value={config.CONTRAT.MAX_HOURS_7_ROLLING} onChange={e=>handleContratChange('MAX_HOURS_7_ROLLING', e.target.value)} style={numberInputStyle} /></div>
