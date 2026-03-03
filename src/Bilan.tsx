@@ -8,7 +8,6 @@ interface BilanProps {
     endDay: number;
 }
 
-// Interface pour typer les données calculées
 interface StatResult {
     agent: string;
     isBureau: boolean;
@@ -18,37 +17,63 @@ interface StatResult {
     diff: number;
     details: Record<string, number>;
     leaves: number;
+    // Nouveaux champs
+    weekendSat: number;
+    weekendSun: number;
+    weeklyHours: Record<number, number>; // { 1: 35.5, 2: 32.0 } (Numéro semaine -> Heures)
 }
 
 const safeString = (val: any) => (val === null || val === undefined ? '' : String(val).trim().toUpperCase());
 
-const Bilan: React.FC<BilanProps> = ({ planning, config, startDay, endDay }) => {
+// Helper pour le numéro de semaine (ISO 8601)
+const getWeekNumber = (d: Date): number => {
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+};
+
+// Helper pour la durée
+const getDuration = (code: string, config: any): number => {
+    const vac = config.VACATIONS[code];
+    if (!vac) return 0;
+    let d = vac.fin - vac.debut;
+    if (d < 0) d += 24; // Gestion nuit (ex: 20h -> 02h)
+    return d;
+};
+
+const Bilan: React.FC<BilanProps> = ({ planning, config, year, startDay, endDay }) => {
 
     // 1. Calcul des Statistiques
-    const stats = useMemo<StatResult[]>(() => {
-        // On se base sur la liste ordonnée des contrôleurs pour l'affichage
+    const { stats, allWeeks } = useMemo(() => {
         const orderedAgents = config.CONTROLEURS || [];
         const vacationsCodes = Object.keys(config.VACATIONS || {});
+        const weeksSet = new Set<number>();
 
-        return orderedAgents.map((agent: string) => {
-            // Trouver les données de planning pour cet agent
+        const computedStats: StatResult[] = orderedAgents.map((agent: string) => {
             const agentRow = planning.find((p: any) => p.Agent === agent) || {};
             
             let worked = 0;
-            let leaves = 0; // 'C' uniquement
-            let neutralized = 0; // 'C' + autres codes non productifs (Stage, etc.)
-            
-            // Compteurs par type de vacation
+            let leaves = 0;
+            let neutralized = 0;
+            let weekendSat = 0;
+            let weekendSun = 0;
+            const weeklyHours: Record<number, number> = {};
             const details: Record<string, number> = {};
             vacationsCodes.forEach((v: string) => details[v] = 0);
 
             // Parcours des jours
-            // Note: Calcul simple de la durée en jours
             const daysCount = (endDay - startDay) + 1;
 
             for (let i = startDay; i <= endDay; i++) {
                 const val = safeString(agentRow[i.toString()]);
                 
+                // Calcul Date et Semaine
+                const currentDate = new Date(year, 0, i); // Janvier est 0
+                const weekNum = getWeekNumber(currentDate);
+                weeksSet.add(weekNum);
+
                 if (!val || val === '' || val === 'OFF' || val === '0') continue;
 
                 if (val === 'C') {
@@ -56,24 +81,27 @@ const Bilan: React.FC<BilanProps> = ({ planning, config, startDay, endDay }) => 
                     neutralized++;
                 } else if (vacationsCodes.includes(val)) {
                     worked++;
-                    // On incrémente le compteur spécifique si la clé existe
-                    if (details[val] !== undefined) {
-                        details[val]++;
-                    }
+                    if (details[val] !== undefined) details[val]++;
+                    
+                    // Calcul Heures
+                    const hours = getDuration(val, config);
+                    weeklyHours[weekNum] = (weeklyHours[weekNum] || 0) + hours;
+
+                    // Calcul WE
+                    const dayOfWeek = currentDate.getDay(); // 0 = Dimanche, 6 = Samedi
+                    if (dayOfWeek === 6) weekendSat++;
+                    if (dayOfWeek === 0) weekendSun++;
+
                 } else {
-                    // Autre code (Stage, FSAU...) -> Compte comme neutralisé pour la cible
                     neutralized++;
                 }
             }
 
-            // Calcul Cible (Même formule que PlanningTable)
+            // Calcul Cible
             const rate = (config.AGENT_WORK_RATES && config.AGENT_WORK_RATES[agent]) || 100;
             const balance = (config.AGENT_BALANCES && config.AGENT_BALANCES[agent]) || 0;
-            
-            // Formule : Taux% * (Total - Neutralisés) / 2
             const baseTarget = Math.ceil((rate / 100) * (daysCount - neutralized) / 2);
             const finalTarget = baseTarget + balance;
-            
             const diff = worked - finalTarget;
 
             return {
@@ -84,111 +112,141 @@ const Bilan: React.FC<BilanProps> = ({ planning, config, startDay, endDay }) => 
                 target: finalTarget,
                 diff,
                 details,
-                leaves
+                leaves,
+                weekendSat,
+                weekendSun,
+                weeklyHours
             };
         });
-    }, [planning, config, startDay, endDay]);
+
+        // Trier les semaines pour l'affichage des colonnes
+        const sortedWeeks = Array.from(weeksSet).sort((a, b) => a - b);
+
+        return { stats: computedStats, allWeeks: sortedWeeks };
+    }, [planning, config, startDay, endDay, year]);
 
     // 2. Rendu
     return (
-        <div style={{ padding: '20px', fontFamily: '"Inter", sans-serif', maxWidth: '1200px', margin: '0 auto' }}>
+        <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            height: '100%', 
+            padding: '20px', 
+            boxSizing: 'border-box',
+            fontFamily: '"Inter", sans-serif',
+            background: '#f8fafc'
+        }}>
             
-            <div style={{marginBottom: 20, borderBottom:'1px solid #e2e8f0', paddingBottom:10}}>
-                <h2 style={{ margin: 0, color: '#1e293b' }}>📊 Bilan de la période</h2>
+            <div style={{marginBottom: 15, flexShrink: 0}}>
+                <h2 style={{ margin: 0, color: '#1e293b' }}>📊 Bilan & Statistiques</h2>
                 <div style={{ fontSize: 13, color: '#64748b' }}>
-                    Du jour {startDay} au jour {endDay} • {config.CONTROLEURS.length} Agents
+                    Analyse des vacations, des week-ends et du temps de travail.
                 </div>
             </div>
 
-            <div style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, background: 'white' }}>
-                    <thead>
-                        <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
-                            <th style={thStyle}>Agent</th>
-                            <th style={thStyle}>Taux</th>
+            {/* CONTENEUR TABLEAU SCROLLABLE */}
+            <div style={{ 
+                flex: 1, 
+                overflow: 'auto', // L'ascenseur est ici
+                borderRadius: 8, 
+                border: '1px solid #e2e8f0', 
+                boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
+                background: 'white'
+            }}>
+                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 12 }}>
+                    <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                        <tr style={{ background: '#f1f5f9', color: '#475569', textAlign: 'left' }}>
+                            <th style={stickyHeaderStyle}>Agent</th>
                             
-                            {/* Section Objectifs */}
-                            <th style={{...thStyle, borderLeft:'2px solid #cbd5e1', textAlign:'center', color:'#334155'}}>Cible</th>
-                            <th style={{...thStyle, textAlign:'center', color:'#16a34a'}}>Réalisé</th>
-                            <th style={{...thStyle, textAlign:'center'}}>Écart</th>
+                            {/* Objectifs */}
+                            <th style={{...stickyHeaderStyle, borderLeft:'2px solid #cbd5e1', textAlign:'center'}}>Cible</th>
+                            <th style={{...stickyHeaderStyle, textAlign:'center'}}>Réalisé</th>
+                            <th style={{...stickyHeaderStyle, textAlign:'center'}}>Écart</th>
                             
-                            {/* Section Détails */}
-                            <th style={{...thStyle, borderLeft:'2px solid #cbd5e1'}}>Détail Vacations</th>
-                            <th style={{...thStyle, textAlign:'right'}}>Congés</th>
+                            {/* Week-ends */}
+                            <th style={{...stickyHeaderStyle, borderLeft:'2px solid #cbd5e1', textAlign:'center', color:'#b45309'}}>Samedi</th>
+                            <th style={{...stickyHeaderStyle, textAlign:'center', color:'#b45309'}}>Dimanche</th>
+                            <th style={{...stickyHeaderStyle, textAlign:'center', fontWeight:'800', color:'#b45309', background:'#fff7ed'}}>Total WE</th>
+
+                            {/* Heures Hebdo */}
+                            {allWeeks.map(week => (
+                                <th key={week} style={{...stickyHeaderStyle, borderLeft: week === allWeeks[0] ? '2px solid #cbd5e1' : '1px solid #e2e8f0', textAlign:'center', minWidth: 50}}>
+                                    Sem {week}
+                                </th>
+                            ))}
+
+                            {/* Détails */}
+                            <th style={{...stickyHeaderStyle, borderLeft:'2px solid #cbd5e1'}}>Répartition</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {stats.map((stat: StatResult, idx: number) => {
+                        {stats.map((stat, idx) => {
                             const isEven = idx % 2 === 0;
                             const diffColor = stat.diff === 0 ? '#94a3b8' : (stat.diff > 0 ? '#16a34a' : '#ef4444');
                             const diffSign = stat.diff > 0 ? '+' : '';
+                            const totalWE = stat.weekendSat + stat.weekendSun;
 
                             return (
-                                <tr key={stat.agent} style={{ background: isEven ? '#ffffff' : '#fcfcfc', borderBottom: '1px solid #f1f5f9' }}>
+                                <tr key={stat.agent} style={{ background: isEven ? '#ffffff' : '#fcfcfc' }}>
                                     
                                     {/* Agent */}
                                     <td style={tdStyle}>
-                                        <div style={{display:'flex', alignItems:'center', gap:6}}>
-                                            <span style={{ fontWeight: 'bold', color: stat.isBureau ? '#2563eb' : '#1e293b' }}>
+                                        <div style={{display:'flex', flexDirection:'column'}}>
+                                            <span style={{ fontWeight: 'bold', color: stat.isBureau ? '#2563eb' : '#1e293b', fontSize: 13 }}>
                                                 {stat.agent}
                                             </span>
-                                            {stat.isBureau && <span title="Bureau">🏢</span>}
+                                            {stat.rate < 100 && <span style={{fontSize:9, color:'#ef4444', fontWeight:600}}>{stat.rate}%</span>}
                                         </div>
                                     </td>
 
-                                    {/* Taux */}
-                                    <td style={tdStyle}>
-                                        {stat.rate < 100 ? (
-                                            <span style={{ fontSize: 11, background: '#fee2e2', color: '#ef4444', padding: '2px 6px', borderRadius: 4, fontWeight: '600' }}>
-                                                {stat.rate}%
-                                            </span>
-                                        ) : (
-                                            <span style={{color:'#cbd5e1'}}>100%</span>
-                                        )}
-                                    </td>
-
-                                    {/* Cible (Target) */}
-                                    <td style={{...tdStyle, borderLeft:'2px solid #f1f5f9', textAlign:'center', fontWeight:'600', color:'#64748b'}}>
+                                    {/* Cible */}
+                                    <td style={{...tdStyle, borderLeft:'2px solid #f1f5f9', textAlign:'center', color:'#64748b', fontWeight:'600'}}>
                                         {stat.target}
                                     </td>
-
-                                    {/* Réalisé (Worked) */}
-                                    <td style={{...tdStyle, textAlign:'center', fontWeight:'800', color:'#1e293b', fontSize:14}}>
+                                    {/* Réalisé */}
+                                    <td style={{...tdStyle, textAlign:'center', fontWeight:'800', color:'#1e293b'}}>
                                         {stat.worked}
                                     </td>
-
-                                    {/* Écart (Diff) */}
+                                    {/* Écart */}
                                     <td style={{...tdStyle, textAlign:'center', fontWeight:'bold', color: diffColor}}>
-                                        {stat.diff !== 0 && (
-                                            <span style={{ background: stat.diff > 0 ? '#dcfce7' : '#fee2e2', padding: '2px 8px', borderRadius: 12, fontSize: 12 }}>
-                                                {diffSign}{stat.diff}
-                                            </span>
-                                        )}
-                                        {stat.diff === 0 && <span style={{color:'#cbd5e1'}}>=</span>}
+                                        {stat.diff !== 0 ? `${diffSign}${stat.diff}` : '='}
                                     </td>
 
-                                    {/* Détail Vacations */}
+                                    {/* WE */}
+                                    <td style={{...tdStyle, borderLeft:'2px solid #f1f5f9', textAlign:'center'}}>{stat.weekendSat}</td>
+                                    <td style={{...tdStyle, textAlign:'center'}}>{stat.weekendSun}</td>
+                                    <td style={{...tdStyle, textAlign:'center', fontWeight:'bold', background:'#fff7ed', color:'#9a3412'}}>{totalWE}</td>
+
+                                    {/* Heures Hebdo */}
+                                    {allWeeks.map(week => {
+                                        const h = stat.weeklyHours[week] || 0;
+                                        // Alerte visuelle si > 44h ou 48h (selon la loi, ici > 40 en rouge pour l'exemple)
+                                        const color = h > 40 ? '#dc2626' : (h > 35 ? '#d97706' : '#334155');
+                                        const weight = h > 35 ? '700' : '400';
+                                        
+                                        return (
+                                            <td key={week} style={{
+                                                ...tdStyle, 
+                                                borderLeft: week === allWeeks[0] ? '2px solid #f1f5f9' : '1px solid #f8fafc',
+                                                textAlign:'center', color: color, fontWeight: weight
+                                            }}>
+                                                {h > 0 ? h + 'h' : '-'}
+                                            </td>
+                                        );
+                                    })}
+
+                                    {/* Détails */}
                                     <td style={{...tdStyle, borderLeft:'2px solid #f1f5f9'}}>
-                                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                                             {Object.entries(stat.details).map(([code, count]) => {
                                                 if (count === 0) return null;
                                                 return (
-                                                    <div key={code} style={{ 
-                                                        display: 'flex', alignItems: 'center', gap: 4, 
-                                                        background: '#f1f5f9', padding: '2px 6px', borderRadius: 4, 
-                                                        border: '1px solid #e2e8f0' 
-                                                    }}>
-                                                        <span style={{ fontSize: 10, fontWeight: '700', color: '#64748b' }}>{code}</span>
-                                                        <span style={{ fontSize: 11, fontWeight: '700', color: '#0f172a' }}>{count as number}</span>
-                                                    </div>
+                                                    <span key={code} style={{ fontSize: 10, background: '#e2e8f0', padding: '1px 4px', borderRadius: 3, color: '#475569' }}>
+                                                        <b>{count}</b> {code}
+                                                    </span>
                                                 );
                                             })}
                                         </div>
-                                    </td>
-
-                                    {/* Congés */}
-                                    <td style={{...tdStyle, textAlign:'right', color: stat.leaves > 0 ? '#db2777' : '#e2e8f0', fontWeight: stat.leaves > 0 ? '600' : '400'}}>
-                                        {stat.leaves} j
                                     </td>
                                 </tr>
                             );
@@ -196,27 +254,25 @@ const Bilan: React.FC<BilanProps> = ({ planning, config, startDay, endDay }) => 
                     </tbody>
                 </table>
             </div>
-            
-            <div style={{marginTop:20, fontSize:12, color:'#94a3b8', fontStyle:'italic'}}>
-                * La cible est calculée selon la formule : (Jours Total - Jours Neutralisés) / 2 x Taux% + Balance Manuelle.
-            </div>
         </div>
     );
 };
 
-// Styles CSS-in-JS simples
-const thStyle: React.CSSProperties = {
-    padding: '12px 16px',
-    fontSize: '11px',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    color: '#64748b',
-    letterSpacing: '0.5px'
+// Styles
+const stickyHeaderStyle: React.CSSProperties = {
+    padding: '10px 12px',
+    borderBottom: '2px solid #e2e8f0',
+    position: 'sticky',
+    top: 0,
+    background: '#f8fafc',
+    zIndex: 2,
+    whiteSpace: 'nowrap'
 };
 
 const tdStyle: React.CSSProperties = {
-    padding: '10px 16px',
-    color: '#334155'
+    padding: '8px 12px',
+    borderBottom: '1px solid #f1f5f9',
+    whiteSpace: 'nowrap'
 };
 
 export default Bilan;
