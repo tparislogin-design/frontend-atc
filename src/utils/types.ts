@@ -3,8 +3,7 @@ export interface AppConfig {
   CONTROLEURS: string[];
   CONTROLLERS_AFFECTES_BUREAU?: string[];
   CONTROLLERS_PARITE_STRICTE?: string[];
-  AGENT_WORK_RATES?: { [agentName: string]: number };
-  // NOUVEAU : Stocke l'ajustement manuel (+1, -2...)
+  AGENT_WORK_RATES?: {[agentName: string]: number };
   AGENT_BALANCES?: { [agentName: string]: number }; 
   VACATIONS: {
     [code: string]: {
@@ -31,5 +30,6 @@ export interface AppConfig {
     BUFFER_DAYS?: number;
     REQUIRE_2_CONSECUTIVE_REST_DAYS?: boolean;
     MAX_SHIFT_TOLERANCE?: number;
+    LOCKED_UNTIL_DAY?: number; // <--- NOUVEAU
   };
 }

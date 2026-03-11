@@ -15,10 +15,6 @@ import type { AppConfig } from './utils/types';
 
 const API_URL = "https://ttttty-ty.hf.space/api/optimize"; 
 
-// ==========================================
-// 1. STYLES & CONSTANTES
-// ==========================================
-
 const sidebarSectionStyle: React.CSSProperties = { padding: 20, borderBottom: '1px solid #f1f5f9' };
 const sidebarTitleStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#64748b', letterSpacing: 0.5, marginBottom: 12, marginTop: 0, textTransform: 'uppercase' };
 const labelStyle: React.CSSProperties = { fontSize: 12, color: '#475569', fontWeight: 500 };
@@ -33,9 +29,9 @@ const tagStyle = (col: string, bg: string, bord: string): React.CSSProperties =>
 
 const DEFAULT_CONFIG: AppConfig = {
   ANNEE: 2026,
-  CONTROLEURS: ["GAO", "WBR", "PLC", "CML", "BBD", "LAK", "MZN", "TRT", "CLO", "LNN", "KGR", "FRD", "DAZ", "GNC", "DTY", "JCT"],
-  CONTROLLERS_AFFECTES_BUREAU: [],
-  CONTROLLERS_PARITE_STRICTE: [],
+  CONTROLEURS:["GAO", "WBR", "PLC", "CML", "BBD", "LAK", "MZN", "TRT", "CLO", "LNN", "KGR", "FRD", "DAZ", "GNC", "DTY", "JCT"],
+  CONTROLLERS_AFFECTES_BUREAU:[],
+  CONTROLLERS_PARITE_STRICTE:[],
   AGENT_WORK_RATES: {},
   AGENT_BALANCES: {},
   VACATIONS: { 
@@ -54,9 +50,8 @@ const DEFAULT_CONFIG: AppConfig = {
     MAX_HOURS_7_ROLLING: 44,
     MAX_BACKTRACKS: 10,
     SOLVER_TIME_LIMIT: 25,
-    MAX_SHIFT_TOLERANCE: 1, // Tolérance par défaut (+1 jour autorisé)
-    BUFFER_DAYS: 4,
-    REQUIRE_2_CONSECUTIVE_REST_DAYS: true
+    MAX_SHIFT_TOLERANCE: 1,
+    LOCKED_UNTIL_DAY: 0 // Défaut : Aucun jour figé
   }
 };
 
@@ -67,39 +62,33 @@ const TimeInput = ({ val, onSave }: { val: number, onSave: (v: number) => void }
     return ( <input type="text" value={displayVal} onChange={(e) => setDisplayVal(e.target.value)} onBlur={handleBlur} onKeyDown={(e) => { if(e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} style={{ width: 50, fontSize: 12, textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: 4, padding: '4px', fontWeight: '600', color: '#1e293b', fontFamily:'monospace' }} /> );
 };
 
-// ==========================================
-// 2. COMPOSANT PRINCIPAL APP
-// ==========================================
-
 function App() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   
-  // États App
   const [year, setYear] = useState(2026);
   const [startDay, setStartDay] = useState(1); 
   const [endDay, setEndDay] = useState(28);
   const [sheetUrl, setSheetUrl] = useState("https://docs.google.com/spreadsheets/d/1lLtFisk983kJ-Yu0rtPyJAoweHxnsKwzen_J1rxsJes/edit");
   
   const [preAssignments, setPreAssignments] = useState<any>({});
-  const [planning, setPlanning] = useState<any[]>([]);
+  const[planning, setPlanning] = useState<any[]>([]);
   
   const [softConstraints, setSoftConstraints] = useState<Set<string>>(new Set());
-  const [hideOff, setHideOff] = useState(true); // Masqué par défaut
+  const [hideOff, setHideOff] = useState(true);
   const [optionalCoverage, setOptionalCoverage] = useState<Record<string, string[]>>({});
 
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{type: string, msg: string}>({type:'', msg:''});
   const [activeTab, setActiveTab] = useState<'planning' | 'desiderata' | 'bilan' | 'config'>('planning');
   const [zoomLevel, setZoomLevel] = useState(100);
-  const [showDesiderataMatch, setShowDesiderataMatch] = useState(false);
+  const[showDesiderataMatch, setShowDesiderataMatch] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
 
-  // États Config
   const [selectedAgentConfig, setSelectedAgentConfig] = useState<string>("");
-  const [newCycleOr1, setNewCycleOr1] = useState("");
+  const[newCycleOr1, setNewCycleOr1] = useState("");
   const [newCycleOr2, setNewCycleOr2] = useState("");
-  const [newCycleAg1, setNewCycleAg1] = useState("");
-  const [newCycleAg2, setNewCycleAg2] = useState("");
+  const[newCycleAg1, setNewCycleAg1] = useState("");
+  const[newCycleAg2, setNewCycleAg2] = useState("");
 
   useEffect(() => {
     const saved = localStorage.getItem('tds_config');
@@ -108,9 +97,8 @@ function App() {
         setConfig(parsed);
         if (parsed.ANNEE) setYear(parsed.ANNEE);
     }
-  }, []);
+  },[]);
 
-  // --- CONFIG HELPERS ---
   const updateConfig = (newConfig: AppConfig) => { setConfig(newConfig); localStorage.setItem('tds_config', JSON.stringify(newConfig)); };
   const handleYearChange = (val: string) => { setYear(parseInt(val) || 2026); updateConfig({ ...config, ANNEE: parseInt(val) || 2026 }); };
   const handleContratChange = (field: keyof typeof config.CONTRAT, val: string) => { updateConfig({ ...config, CONTRAT: { ...config.CONTRAT, [field]: parseInt(val) || 0 } }); };
@@ -127,20 +115,19 @@ function App() {
   };
   const handleChangeVacation = (code: string, f: string, v: number) => {
       // @ts-ignore
-      updateConfig({ ...config, VACATIONS: { ...config.VACATIONS, [code]: { ...config.VACATIONS[code], [f]: v } } });
+      updateConfig({ ...config, VACATIONS: { ...config.VACATIONS,[code]: { ...config.VACATIONS[code], [f]: v } } });
   };
 
   const handleAddBureau = () => {
       const agent = window.prompt("Agent Bureau ?")?.toUpperCase().trim();
       if (!agent) return;
-      const list = config.CONTROLLERS_AFFECTES_BUREAU || [];
+      const list = config.CONTROLLERS_AFFECTES_BUREAU ||[];
       if (!list.includes(agent)) updateConfig({ ...config, CONTROLLERS_AFFECTES_BUREAU: [...list, agent] });
   };
   const handleRemoveBureau = (agent: string) => {
-      updateConfig({ ...config, CONTROLLERS_AFFECTES_BUREAU: (config.CONTROLLERS_AFFECTES_BUREAU || []).filter(a => a !== agent) });
+      updateConfig({ ...config, CONTROLLERS_AFFECTES_BUREAU: (config.CONTROLLERS_AFFECTES_BUREAU ||[]).filter(a => a !== agent) });
   };
 
-  // --- GESTION CYCLES ---
   const handleAddCycle = (type: 'OR' | 'ARGENT') => {
       if (!selectedAgentConfig) return;
       const v1 = type === 'OR' ? newCycleOr1 : newCycleAg1;
@@ -148,12 +135,11 @@ function App() {
       if (!v1 || !v2) return alert("Sélectionnez 2 vacations");
       
       const currentCycles = config.CYCLES || {};
-      const agentCycles = currentCycles[selectedAgentConfig] || { OR: [], ARGENT: [] };
+      const agentCycles = currentCycles[selectedAgentConfig] || { OR: [], ARGENT:[] };
       const list = agentCycles[type] || [];
-      
       if (list.some((pair: string[]) => pair[0] === v1 && pair[1] === v2)) return;
 
-      const newAgentCycles = { ...agentCycles, [type]: [...list, [v1, v2]] };
+      const newAgentCycles = { ...agentCycles, [type]:[...list, [v1, v2]] };
       updateConfig({ ...config, CYCLES: { ...currentCycles, [selectedAgentConfig]: newAgentCycles } });
   };
 
@@ -162,23 +148,22 @@ function App() {
       const currentCycles = config.CYCLES || {};
       const agentCycles = currentCycles[selectedAgentConfig];
       if (!agentCycles) return;
-      const list = [...(agentCycles[type] || [])];
+      const list = [...(agentCycles[type] ||[])];
       list.splice(idx, 1);
-      updateConfig({ ...config, CYCLES: { ...currentCycles, [selectedAgentConfig]: { ...agentCycles, [type]: list } } });
+      updateConfig({ ...config, CYCLES: { ...currentCycles,[selectedAgentConfig]: { ...agentCycles, [type]: list } } });
   };
 
   const handleCycleSettingChange = (field: 'STRICT_MODE' | 'BONUS_OR' | 'BONUS_ARGENT', value: any) => {
       if (!selectedAgentConfig) return;
       const currentCycles = config.CYCLES || {};
-      const agentCycles = currentCycles[selectedAgentConfig] || { OR: [], ARGENT: [] };
+      const agentCycles = currentCycles[selectedAgentConfig] || { OR:[], ARGENT: [] };
       const newAgentCycles = { ...agentCycles, [field]: value };
       updateConfig({ ...config, CYCLES: { ...currentCycles, [selectedAgentConfig]: newAgentCycles } });
   };
 
-  // --- PARITÉ & TAUX & BALANCE ---
   const handleToggleParity = () => {
       if (!selectedAgentConfig) return;
-      const currentList = config.CONTROLLERS_PARITE_STRICTE || [];
+      const currentList = config.CONTROLLERS_PARITE_STRICTE ||[];
       const newList = currentList.includes(selectedAgentConfig) 
           ? currentList.filter(a => a !== selectedAgentConfig) 
           : [...currentList, selectedAgentConfig];
@@ -192,7 +177,6 @@ function App() {
       updateConfig({ ...config, AGENT_WORK_RATES: newRates });
   };
 
-  // AJUSTEMENT MANUEL DU RELIQUAT (BALANCE)
   const handleUpdateBalance = (agent: string, value: number) => {
       const currentBalances = config.AGENT_BALANCES || {};
       if (value === 0) {
@@ -204,7 +188,6 @@ function App() {
       }
   };
 
-  // --- DATA ---
   const handleExportConfig = () => {
       const data = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
       const a = document.createElement('a'); a.href = data; a.download = `tds_config_${year}.json`; a.click();
@@ -231,7 +214,7 @@ function App() {
   const handleToggleAllSoft = () => {
       const allKeys = new Set<string>();
       let count = 0;
-      Object.entries(preAssignments).forEach(([a, days]: [string, any]) => {
+      Object.entries(preAssignments).forEach(([a, days]:[string, any]) => {
           Object.keys(days).forEach(d => { if (days[d]) { allKeys.add(`${a}_${d}`); count++; } });
       });
       if (count === 0) return alert("Rien à cercler");
@@ -239,12 +222,12 @@ function App() {
   };
   const handleToggleOptionalCoverage = (dayNum: number, shiftCode: string) => {
       const dayStr = dayNum.toString();
-      const current = optionalCoverage[dayStr] || [];
+      const current = optionalCoverage[dayStr] ||[];
       const next = current.includes(shiftCode) ? current.filter(s => s !== shiftCode) : [...current, shiftCode];
       setOptionalCoverage({ ...optionalCoverage, [dayStr]: next });
   };
   const handleToggleGlobalOptional = (shiftCode: string) => {
-      const daysList = [];
+      const daysList =[];
       if (startDay <= endDay) { for (let i = startDay; i <= endDay; i++) daysList.push(i.toString()); }
       else { for (let i = startDay; i <= 365; i++) daysList.push(i.toString()); for (let i = 1; i <= endDay; i++) daysList.push(i.toString()); }
       const isAll = daysList.every(d => optionalCoverage[d] && optionalCoverage[d].includes(shiftCode));
@@ -270,29 +253,26 @@ function App() {
   const handleOptimize = async () => {
       setLoading(true); setStatus({type:'loading', msg:'Calcul...'});
       try {
-          const res = await axios.post(API_URL, {
+          const payload = {
               year, start_day: startDay, end_day: endDay, config,
               pre_assignments: preAssignments,
               soft_assignments: Array.from(softConstraints),
-              optional_coverage: optionalCoverage
-          });
+              optional_coverage: optionalCoverage,
+              // ENVOI DU NOUVEAU PARAMÈTRE
+              locked_until_day: config.CONTRAT.LOCKED_UNTIL_DAY || 0
+          };
+          const res = await axios.post(API_URL, payload);
           
           if (res.data.data) { 
               let generatedPlanning = res.data.data;
-
-              // TRI PAR ORDRE DU FICHIER DESIDERATA
               const desiredOrder = Object.keys(preAssignments);
               if (desiredOrder.length > 0) {
                   generatedPlanning.sort((a: any, b: any) => {
                       const idxA = desiredOrder.indexOf(a.Agent);
                       const idxB = desiredOrder.indexOf(b.Agent);
-                      // Sécurité : si non trouvé, on met à la fin
-                      const safeIdxA = idxA === -1 ? 9999 : idxA;
-                      const safeIdxB = idxB === -1 ? 9999 : idxB;
-                      return safeIdxA - safeIdxB;
+                      return (idxA === -1 ? 9999 : idxA) - (idxB === -1 ? 9999 : idxB);
                   });
               }
-
               setPlanning(generatedPlanning); 
               setStatus({type:'success', msg:'Généré !'}); 
               setActiveTab('planning'); 
@@ -306,8 +286,8 @@ function App() {
 
   const renderConfigTab = () => {
       const shifts = Object.keys(config.VACATIONS);
-      const agentConfig = (config.CYCLES || {})[selectedAgentConfig] || { OR: [], ARGENT: [] };
-      const isParity = (config.CONTROLLERS_PARITE_STRICTE || []).includes(selectedAgentConfig);
+      const agentConfig = (config.CYCLES || {})[selectedAgentConfig] || { OR: [], ARGENT:[] };
+      const isParity = (config.CONTROLLERS_PARITE_STRICTE ||[]).includes(selectedAgentConfig);
       const rate = (config.AGENT_WORK_RATES && config.AGENT_WORK_RATES[selectedAgentConfig]) || 100;
       
       const strictMode = agentConfig.STRICT_MODE || false;
@@ -484,7 +464,7 @@ function App() {
                             <button onClick={handleAddBureau} style={{fontSize:11, padding:'4px 8px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:4, cursor:'pointer', fontWeight:'bold'}}>+ Ajouter</button>
                         </div>
                         <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
-                            {(config.CONTROLLERS_AFFECTES_BUREAU || []).map((agent: string) => (
+                            {(config.CONTROLLERS_AFFECTES_BUREAU ||[]).map((agent: string) => (
                                 <div key={agent} style={{display:'flex', alignItems:'center', gap:4, background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:4, padding:'2px 6px', fontSize:11, color:'#1e40af', fontWeight:600}}>{agent}<span onClick={() => handleRemoveBureau(agent)} style={{cursor:'pointer', color:'#ef4444', fontWeight:'bold', marginLeft:2}}>×</span></div>
                             ))}
                         </div>
@@ -496,6 +476,12 @@ function App() {
                         <div style={rowStyle}><label style={labelStyle}>Jour Début</label><input type="number" value={startDay} onChange={e=>setStartDay(Number(e.target.value))} style={numberInputStyle}/></div>
                         <div style={rowStyle}><label style={labelStyle}>Jour Fin</label><input type="number" value={endDay} onChange={e=>setEndDay(Number(e.target.value))} style={numberInputStyle}/></div>
                         <div style={{height:1, background:'#f1f5f9', margin:'10px 0'}}></div>
+                        
+                        {/* NOUVEAU CHAMP : JOURS FIGÉS */}
+                        <div style={rowStyle}>
+                            <label style={labelStyle}>Figé jusqu'au jour <span title="Ces jours ne seront pas modifiés par le solveur" style={{cursor:'help'}}>ℹ️</span></label>
+                            <input type="number" value={config.CONTRAT.LOCKED_UNTIL_DAY || 0} onChange={e=>handleContratChange('LOCKED_UNTIL_DAY', e.target.value)} style={{...numberInputStyle, color:'#16a34a'}} />
+                        </div>
                         
                         <div style={rowStyle}><label style={labelStyle}>Tolérance Cible</label><input type="number" value={config.CONTRAT.MAX_SHIFT_TOLERANCE || 1} onChange={e=>handleContratChange('MAX_SHIFT_TOLERANCE', e.target.value)} style={{...numberInputStyle, color:'#d97706'}} /></div>
                         
