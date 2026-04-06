@@ -8,12 +8,13 @@ import "ag-grid-community/styles/ag-theme-balham.css";
 
 ModuleRegistry.registerModules([ AllCommunityModule ]);
 
+// --- HELPER SÉCURITÉ ---
 const safeString = (val: any): string => {
     if (val === null || val === undefined) return '';
     return String(val);
 };
 
-// --- HEADER GLOBAL ---
+// --- 1. HEADER GLOBAL (Vue Désidérata - GRILLE 2 COLONNES) ---
 const GlobalHeader = (props: any) => {
     const { config, context } = props;
     const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
@@ -44,7 +45,7 @@ const GlobalHeader = (props: any) => {
                     const color = isOptionalEverywhere ? '#2563eb' : '#ef4444';
                     return (
                         <div key={idx} style={{display:'flex', justifyContent:'center', alignItems:'center'}}>
-                            <span onClick={(e) => { e.stopPropagation(); onToggleGlobalOptional(code); }} style={{ fontSize: 10, color: color, fontWeight: '700', cursor: 'pointer', padding: '1px 2px', border: '1px solid #e2e8f0', borderRadius: '4px', backgroundColor: '#fff', width: '100%', textAlign: 'center' }}>
+                            <span onClick={(e) => { e.stopPropagation(); onToggleGlobalOptional(code); }} title={`Rendre ${code} optionnel/obligatoire pour TOUT le mois`} style={{ fontSize: 10, color: color, fontWeight: '700', cursor: 'pointer', padding: '1px 2px', border: '1px solid #e2e8f0', borderRadius: '4px', backgroundColor: '#fff', width: '100%', textAlign: 'center' }}>
                                 {code}
                             </span>
                         </div>
@@ -55,7 +56,7 @@ const GlobalHeader = (props: any) => {
     );
 };
 
-// --- HEADER RÉSUMÉ ---
+// --- 2. HEADER RÉSUMÉ (Vue Planning - COMPACT) ---
 const SummaryHeader = (props: any) => {
     const { api, config, context } = props;
     const { daysList } = context; 
@@ -68,7 +69,7 @@ const SummaryHeader = (props: any) => {
 
     if (api && daysList) {
         daysList.forEach((dayNum: number) => {
-            // NOUVEAU : On ne compte pas les manquants sur les jours figés !
+            // On ne compte pas les manquants sur les jours figés !
             const lockedUntil = config?.CONTRAT?.LOCKED_UNTIL_DAY || 0;
             if (dayNum <= lockedUntil) return;
 
@@ -110,7 +111,7 @@ const SummaryHeader = (props: any) => {
         <div style={boxStyle}>
             <div style={{fontSize: 9, fontWeight: '800', color: '#64748b', marginBottom: 4, textTransform:'uppercase'}}>MANQUANTS</div>
             {summary.length === 0 ? <div style={{fontSize: 20}}>✅</div> : (
-                <div style={{textAlign:'center', lineHeight:'1.2', fontSize: 10, fontWeight:'600', color:'#ef4444', overflowY:'auto', maxHeight:'80px', width:'100%'}}>
+                <div style={{textAlign:'center', lineHeight:'1.2', fontSize: 10, fontWeight:'600', color:'#ef4444'}}>
                     {summary.map(([shift, count], idx) => (
                         <span key={shift}><span style={{fontWeight:'800'}}>{count}</span>x{shift}{idx < summary.length - 1 ? ', ' : ''}</span>
                     ))}
@@ -120,7 +121,7 @@ const SummaryHeader = (props: any) => {
     );
 };
 
-// --- HEADER QUOTIDIEN ---
+// --- 3. HEADER QUOTIDIEN ---
 const CustomHeader = (props: any) => {
     const { displayName, dayNum, fullDate, api, config, context } = props;
     const { optionalCoverage, onToggleOptionalCoverage, isDesiderataView } = context || {};
@@ -207,7 +208,7 @@ const CustomHeader = (props: any) => {
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
     const rowData = props.data;
-    const { daysList, config, preAssignments, isDesiderataView, softConstraints, onUpdateBalance } = props.context || {}; 
+    const { daysList, config, preAssignments, isDesiderataView, softConstraints, onUpdateBalance, onToggleRowSoft } = props.context || {}; 
 
     const normalize = (v: any) => {
         const s = safeString(v).trim().toUpperCase();
@@ -226,6 +227,7 @@ const AgentCellRenderer = (props: any) => {
                 else worked++;
             }
 
+            // GESTION VUE DÉSIDÉRATA VS PLANNING
             if (isDesiderataView) {
                 if (softConstraints && softConstraints.has(`${agentName}_${dayNum}`)) softCount++;
             } else {
@@ -249,7 +251,20 @@ const AgentCellRenderer = (props: any) => {
     
     const statsColor = isDesiderataView ? '#64748b' : (worked >= (finalTarget - 1) ? '#16a34a' : '#ea580c');
     const isBureau = (config?.CONTROLLERS_AFFECTES_BUREAU ||[]).includes(agentName);
-    const nameStyle = { fontWeight: '800', fontSize: 13, color: isBureau ? '#2563eb' : '#334155' };
+    
+    const nameStyle = { 
+        fontWeight: '800', 
+        fontSize: 13, 
+        color: isBureau ? '#2563eb' : '#334155',
+        cursor: isDesiderataView ? 'pointer' : 'default',
+        textDecoration: isDesiderataView ? 'underline dotted #94a3b8' : 'none'
+    };
+
+    const handleRowClick = (e: React.MouseEvent) => {
+        if (!isDesiderataView || !onToggleRowSoft) return;
+        e.stopPropagation();
+        onToggleRowSoft(agentName);
+    };
 
     const handleBalanceClick = (e: React.MouseEvent) => {
         if (!isDesiderataView || !onUpdateBalance) return;
@@ -264,7 +279,9 @@ const AgentCellRenderer = (props: any) => {
     return (
         <div style={{display:'flex', flexDirection:'column', justifyContent:'center', height:'100%', paddingLeft: 8}}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <span style={nameStyle}>{agentName} {isBureau && ' 🏢'} {workRate < 100 && <span style={{fontSize:10, color:'#ef4444', marginLeft:4}}>{workRate}%</span>}</span>
+                <span onClick={handleRowClick} style={nameStyle} title={isDesiderataView ? "Clic pour basculer toute la ligne en Soft/Hard" : ""}>
+                    {agentName} {isBureau && ' 🏢'} {workRate < 100 && <span style={{fontSize:10, color:'#ef4444', marginLeft:4}}>{workRate}%</span>}
+                </span>
             </div>
             <div style={{display:'flex', alignItems:'center', gap: 8, marginTop: 2}}>
                 <div style={{fontSize: 10, color: statsColor, fontWeight: 700}}>
@@ -275,7 +292,7 @@ const AgentCellRenderer = (props: any) => {
                     </span>
                 </div>
                 {isDesiderataView ? (
-                    softCount > 0 && ( <div title={`${softCount} demandes Soft`} style={{fontSize: 9, color: '#9333ea', fontWeight: '800', background: '#f3e8ff', padding: '1px 4px', borderRadius: '4px', border: '1px solid #d8b4fe'}}>{softCount} 🟣</div> )
+                    softCount > 0 && ( <div title={`${softCount} demande(s) Soft`} style={{fontSize: 9, color: '#9333ea', fontWeight: '800', background: '#f3e8ff', padding: '1px 4px', borderRadius: '4px', border: '1px solid #d8b4fe'}}>{softCount} 🟣</div> )
                 ) : (
                     refusedCount > 0 && ( <div title={`${refusedCount} demande(s) non respectée(s)`} style={{fontSize: 9, color: '#ef4444', fontWeight: '800', background: '#fee2e2', padding: '1px 4px', borderRadius: '4px', border: '1px solid #fca5a5'}}>{refusedCount} ⚠️</div> )
                 )}
@@ -393,6 +410,7 @@ interface PlanningTableProps {
   onToggleOptionalCoverage?: (day: number, shift: string) => void;
   onToggleGlobalOptional?: (shift: string) => void;
   onUpdateBalance?: (agent: string, val: number) => void;
+  onToggleRowSoft?: (agent: string) => void;
 }
 
 const PlanningTable: React.FC<PlanningTableProps> = (props) => {
@@ -438,7 +456,6 @@ const PlanningTable: React.FC<PlanningTableProps> = (props) => {
       const lockedUntil = config?.CONTRAT?.LOCKED_UNTIL_DAY || 0;
       const isLocked = dayNum <= lockedUntil;
 
-      // Le fond de la cellule entière change si le jour est figé
       let cellBg = isWeekend ? '#e5e7eb' : 'white';
       if (isLocked) cellBg = isWeekend ? '#d1d5db' : '#f1f5f9';
 
@@ -457,7 +474,7 @@ const PlanningTable: React.FC<PlanningTableProps> = (props) => {
   return (
     <div className="ag-theme-balham" style={{ height: '100%', width: '100%', zoom: `${props.zoomLevel}%` }}>
       <style>{`.ag-theme-balham .ag-header-cell { padding: 0 !important; } .ag-theme-balham .ag-header-cell-label { width: 100%; height: 100%; padding: 0; } .ag-theme-balham .ag-root-wrapper { border: 1px solid #94a3b8; } .ag-theme-balham .ag-header { border-bottom: 2px solid #cbd5e1; background-color: white; } .ag-theme-balham .ag-row { border-bottom-color: #cbd5e1; } .ag-theme-balham .ag-pinned-left-header { border-right: 2px solid #cbd5e1; } .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; } .ag-theme-balham .weekend-header { background-color: #e5e7eb !important; border-bottom: 1px solid #cbd5e1; }`}</style>
-<AgGridReact 
+      <AgGridReact 
         rowData={data ||[]} 
         columnDefs={columnDefs} 
         components={components} 
