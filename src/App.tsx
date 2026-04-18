@@ -33,9 +33,9 @@ const tagStyle = (col: string, bg: string, bord: string): React.CSSProperties =>
 
 const DEFAULT_CONFIG: AppConfig = {
   ANNEE: 2026,
-  CONTROLEURS:["GAO", "WBR", "PLC", "CML", "BBD", "LAK", "MZN", "TRT", "CLO", "LNN", "KGR", "FRD", "DAZ", "GNC", "DTY", "JCT"],
-  CONTROLLERS_AFFECTES_BUREAU:[],
-  CONTROLLERS_PARITE_STRICTE:[],
+  CONTROLEURS: ["GAO", "WBR", "PLC", "CML", "BBD", "LAK", "MZN", "TRT", "CLO", "LNN", "KGR", "FRD", "DAZ", "GNC", "DTY", "JCT"],
+  CONTROLLERS_AFFECTES_BUREAU: [],
+  CONTROLLERS_PARITE_STRICTE: [],
   AGENT_WORK_RATES: {},
   AGENT_BALANCES: {},
   VACATIONS: { 
@@ -56,7 +56,8 @@ const DEFAULT_CONFIG: AppConfig = {
     SOLVER_TIME_LIMIT: 25,
     MAX_SHIFT_TOLERANCE: 1,
     BUFFER_DAYS: 4,
-    REQUIRE_2_CONSECUTIVE_REST_DAYS: true
+    REQUIRE_2_CONSECUTIVE_REST_DAYS: true,
+    LOCKED_UNTIL_DAY: 0 // Par défaut : Aucun jour bloqué
   }
 };
 
@@ -75,27 +76,28 @@ function App() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   
   const [year, setYear] = useState(2026);
-  const[startDay, setStartDay] = useState(1); 
+  const [startDay, setStartDay] = useState(1); 
   const [endDay, setEndDay] = useState(28);
   const [sheetUrl, setSheetUrl] = useState("https://docs.google.com/spreadsheets/d/1lLtFisk983kJ-Yu0rtPyJAoweHxnsKwzen_J1rxsJes/edit");
   
   const [preAssignments, setPreAssignments] = useState<any>({});
   const [planning, setPlanning] = useState<any[]>([]);
   
-  const[softConstraints, setSoftConstraints] = useState<Set<string>>(new Set());
+  const [softConstraints, setSoftConstraints] = useState<Set<string>>(new Set());
   const [hideOff, setHideOff] = useState(true);
   const [optionalCoverage, setOptionalCoverage] = useState<Record<string, string[]>>({});
 
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{type: string, msg: string}>({type:'', msg:''});
-  const[activeTab, setActiveTab] = useState<'planning' | 'desiderata' | 'bilan' | 'config'>('planning');
+  const [activeTab, setActiveTab] = useState<'planning' | 'desiderata' | 'bilan' | 'config'>('planning');
   const [zoomLevel, setZoomLevel] = useState(100);
-  const[showDesiderataMatch, setShowDesiderataMatch] = useState(false);
-  const[showSidebar, setShowSidebar] = useState(true);
+  const [showDesiderataMatch, setShowDesiderataMatch] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
 
+  // États Config
   const [selectedAgentConfig, setSelectedAgentConfig] = useState<string>("");
   const [newCycleOr1, setNewCycleOr1] = useState("");
-  const[newCycleOr2, setNewCycleOr2] = useState("");
+  const [newCycleOr2, setNewCycleOr2] = useState("");
   const [newCycleAg1, setNewCycleAg1] = useState("");
   const [newCycleAg2, setNewCycleAg2] = useState("");
 
@@ -106,7 +108,7 @@ function App() {
         setConfig(parsed);
         if (parsed.ANNEE) setYear(parsed.ANNEE);
     }
-  },[]);
+  }, []);
 
   // --- CONFIG HELPERS ---
   const updateConfig = (newConfig: AppConfig) => { setConfig(newConfig); localStorage.setItem('tds_config', JSON.stringify(newConfig)); };
@@ -131,14 +133,13 @@ function App() {
   const handleAddBureau = () => {
       const agent = window.prompt("Agent Bureau ?")?.toUpperCase().trim();
       if (!agent) return;
-      const list = config.CONTROLLERS_AFFECTES_BUREAU ||[];
+      const list = config.CONTROLLERS_AFFECTES_BUREAU || [];
       if (!list.includes(agent)) updateConfig({ ...config, CONTROLLERS_AFFECTES_BUREAU: [...list, agent] });
   };
   const handleRemoveBureau = (agent: string) => {
-      updateConfig({ ...config, CONTROLLERS_AFFECTES_BUREAU: (config.CONTROLLERS_AFFECTES_BUREAU ||[]).filter(a => a !== agent) });
+      updateConfig({ ...config, CONTROLLERS_AFFECTES_BUREAU: (config.CONTROLLERS_AFFECTES_BUREAU || []).filter(a => a !== agent) });
   };
 
-  // --- GESTION CYCLES ---
   const handleAddCycle = (type: 'OR' | 'ARGENT') => {
       if (!selectedAgentConfig) return;
       const v1 = type === 'OR' ? newCycleOr1 : newCycleAg1;
@@ -146,8 +147,9 @@ function App() {
       if (!v1 || !v2) return alert("Sélectionnez 2 vacations");
       
       const currentCycles = config.CYCLES || {};
-      const agentCycles = currentCycles[selectedAgentConfig] || { OR:[], ARGENT: [] };
-      const list = agentCycles[type] ||[];
+      const agentCycles = currentCycles[selectedAgentConfig] || { OR: [], ARGENT: [] };
+      const list = agentCycles[type] || [];
+      
       if (list.some((pair: string[]) => pair[0] === v1 && pair[1] === v2)) return;
 
       const newAgentCycles = { ...agentCycles, [type]: [...list, [v1, v2]] };
@@ -159,7 +161,7 @@ function App() {
       const currentCycles = config.CYCLES || {};
       const agentCycles = currentCycles[selectedAgentConfig];
       if (!agentCycles) return;
-      const list =[...(agentCycles[type] ||[])];
+      const list = [...(agentCycles[type] || [])];
       list.splice(idx, 1);
       updateConfig({ ...config, CYCLES: { ...currentCycles, [selectedAgentConfig]: { ...agentCycles, [type]: list } } });
   };
@@ -167,15 +169,14 @@ function App() {
   const handleCycleSettingChange = (field: 'STRICT_MODE' | 'BONUS_OR' | 'BONUS_ARGENT', value: any) => {
       if (!selectedAgentConfig) return;
       const currentCycles = config.CYCLES || {};
-      const agentCycles = currentCycles[selectedAgentConfig] || { OR: [], ARGENT:[] };
+      const agentCycles = currentCycles[selectedAgentConfig] || { OR: [], ARGENT: [] };
       const newAgentCycles = { ...agentCycles, [field]: value };
       updateConfig({ ...config, CYCLES: { ...currentCycles, [selectedAgentConfig]: newAgentCycles } });
   };
 
-  // --- PARITÉ, TAUX & BALANCE ---
   const handleToggleParity = () => {
       if (!selectedAgentConfig) return;
-      const currentList = config.CONTROLLERS_PARITE_STRICTE ||[];
+      const currentList = config.CONTROLLERS_PARITE_STRICTE || [];
       const newList = currentList.includes(selectedAgentConfig) 
           ? currentList.filter(a => a !== selectedAgentConfig) 
           : [...currentList, selectedAgentConfig];
@@ -217,82 +218,49 @@ function App() {
       }
   };
 
-  // ==========================================
-  // GESTION DES BOUTONS SOFT (DESIDERATA)
-  // ==========================================
-
-  // 1. Soft Cellule individuelle (Clic droit)
+  // --- BOUTONS SOFT (Vue Désidérata) ---
   const handleToggleSoft = (agent: string, day: number) => {
       const key = `${agent}_${day}`;
       const s = new Set(softConstraints);
       if (s.has(key)) s.delete(key); else s.add(key);
       setSoftConstraints(s);
   };
-
-  // 2. Soft Ligne Entière (Clic nom agent)
   const handleToggleRowSoft = (agent: string) => {
       const days = preAssignments[agent];
       if (!days) return;
-
       const rowKeys = new Set<string>();
       let count = 0;
       Object.keys(days).forEach(day => {
-          if (days[day] && days[day] !== "") {
-              rowKeys.add(`${agent}_${day}`);
-              count++;
-          }
+          if (days[day] && days[day] !== "") { rowKeys.add(`${agent}_${day}`); count++; }
       });
-
       if (count === 0) return;
-
-      // On vérifie si tout est déjà Soft
       let allRowSoft = true;
       rowKeys.forEach(k => { if (!softConstraints.has(k)) allRowSoft = false; });
-
       const newSoft = new Set(softConstraints);
-      if (allRowSoft) {
-          rowKeys.forEach(k => newSoft.delete(k)); // Tout désactiver
-      } else {
-          rowKeys.forEach(k => newSoft.add(k));    // Tout activer
-      }
+      if (allRowSoft) rowKeys.forEach(k => newSoft.delete(k)); 
+      else rowKeys.forEach(k => newSoft.add(k));    
       setSoftConstraints(newSoft);
   };
-
-  // 3. Soft TOUS les Congés ('C')
   const handleToggleAllCSoft = () => {
       const allCKeys = new Set<string>();
       let count = 0;
-      
       Object.entries(preAssignments).forEach(([agent, days]:[string, any]) => {
           Object.keys(days).forEach(day => {
               const req = days[day];
               if (req) {
-                  // Découpage propre de la demande
                   const allowed = String(req).split(/[,/ ]+/).map(s => s.trim().toUpperCase()).filter(s => s !== '');
-                  if (allowed.includes('C')) {
-                      allCKeys.add(`${agent}_${day}`);
-                      count++;
-                  }
+                  if (allowed.includes('C')) { allCKeys.add(`${agent}_${day}`); count++; }
               }
           });
       });
-
-      if (count === 0) return alert("Aucun congé (C) trouvé dans les désidérata.");
-
-      // Vérifie si tous les C sont déjà soft
+      if (count === 0) return alert("Aucun congé (C) trouvé.");
       let allCSoft = true;
       allCKeys.forEach(k => { if (!softConstraints.has(k)) allCSoft = false; });
-
       const newSoft = new Set(softConstraints);
-      if (allCSoft) {
-          allCKeys.forEach(k => newSoft.delete(k)); // Désactiver
-      } else {
-          allCKeys.forEach(k => newSoft.add(k));    // Activer
-      }
+      if (allCSoft) allCKeys.forEach(k => newSoft.delete(k)); 
+      else allCKeys.forEach(k => newSoft.add(k));    
       setSoftConstraints(newSoft);
   };
-
-  // 4. Soft GLOBAL (Tout)
   const handleToggleAllSoft = () => {
       const allKeys = new Set<string>();
       let count = 0;
@@ -305,24 +273,25 @@ function App() {
 
   const handleToggleOptionalCoverage = (dayNum: number, shiftCode: string) => {
       const dayStr = dayNum.toString();
-      const current = optionalCoverage[dayStr] ||[];
-      const next = current.includes(shiftCode) ? current.filter(s => s !== shiftCode) :[...current, shiftCode];
+      const current = optionalCoverage[dayStr] || [];
+      const next = current.includes(shiftCode) ? current.filter(s => s !== shiftCode) : [...current, shiftCode];
       setOptionalCoverage({ ...optionalCoverage, [dayStr]: next });
   };
   const handleToggleGlobalOptional = (shiftCode: string) => {
-      const daysList =[];
+      const daysList = [];
       if (startDay <= endDay) { for (let i = startDay; i <= endDay; i++) daysList.push(i.toString()); }
       else { for (let i = startDay; i <= 365; i++) daysList.push(i.toString()); for (let i = 1; i <= endDay; i++) daysList.push(i.toString()); }
       const isAll = daysList.every(d => optionalCoverage[d] && optionalCoverage[d].includes(shiftCode));
       const newCov = { ...optionalCoverage };
       daysList.forEach(d => {
-          const cur = newCov[d] ||[];
+          const cur = newCov[d] || [];
           if (isAll) newCov[d] = cur.filter(s => s !== shiftCode);
           else if (!cur.includes(shiftCode)) newCov[d] = [...cur, shiftCode];
       });
       setOptionalCoverage(newCov);
   };
 
+  // --- API ---
   const handleImport = async () => {
     setStatus({type:'loading', msg:'📡 Lecture...'});
     try {
@@ -335,13 +304,21 @@ function App() {
 
   const handleOptimize = async () => {
       setLoading(true); setStatus({type:'loading', msg:'Calcul...'});
+      
+      // On prépare la liste des jours bloqués à envoyer au solver
+      const lockedUntil = config.CONTRAT.LOCKED_UNTIL_DAY || 0;
+      const lockedDays = [];
+      for(let i = startDay; i <= lockedUntil; i++) {
+          lockedDays.push(i);
+      }
+
       try {
           const res = await axios.post(API_URL, {
               year, start_day: startDay, end_day: endDay, config,
               pre_assignments: preAssignments,
               soft_assignments: Array.from(softConstraints),
               optional_coverage: optionalCoverage,
-              locked_days:[] // Futur usage
+              locked_days: lockedDays // On envoie les jours figés
           });
           
           if (res.data.data) { 
@@ -369,8 +346,8 @@ function App() {
 
   const renderConfigTab = () => {
       const shifts = Object.keys(config.VACATIONS);
-      const agentConfig = (config.CYCLES || {})[selectedAgentConfig] || { OR: [], ARGENT:[] };
-      const isParity = (config.CONTROLLERS_PARITE_STRICTE ||[]).includes(selectedAgentConfig);
+      const agentConfig = (config.CYCLES || {})[selectedAgentConfig] || { OR: [], ARGENT: [] };
+      const isParity = (config.CONTROLLERS_PARITE_STRICTE || []).includes(selectedAgentConfig);
       const rate = (config.AGENT_WORK_RATES && config.AGENT_WORK_RATES[selectedAgentConfig]) || 100;
       
       const strictMode = agentConfig.STRICT_MODE || false;
@@ -495,15 +472,12 @@ function App() {
                         <button onClick={() => setHideOff(!hideOff)} style={{background: hideOff ? '#f1f5f9' : 'transparent', color: hideOff ? '#334155' : '#64748b', border: hideOff ? '1px solid #cbd5e1' : '1px solid #e2e8f0', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600}}>{hideOff ? '👻 Voir OFF' : '👻 Masquer OFF'}</button>
                     </div>
                 )}
-                
-                {/* NOUVEAUX BOUTONS DANS L'ONGLET DÉSIDÉRATA */}
                 {activeTab === 'desiderata' && (
                     <div style={{display:'flex', gap: 5}}>
                         <button onClick={handleToggleAllCSoft} style={{background:'#fef3c7', color:'#b45309', border:'1px solid #fde68a', padding:'6px 12px', borderRadius:6, cursor:'pointer', fontSize: 12, fontWeight: 600}} title="Rendre tous les congés optionnels">🏖️ C Soft</button>
                         <button onClick={handleToggleAllSoft} style={{background:'#f3e8ff', color:'#9333ea', border:'1px solid #d8b4fe', padding:'6px 12px', borderRadius:6, cursor:'pointer', fontSize: 12, fontWeight: 600}} title="Priorité basse (Violet)">{softConstraints.size > 0 ? '🟣 Tout Reset' : '🟣 Tout Soft'}</button>
                     </div>
                 )}
-
                 <input type="range" min="50" max="150" value={zoomLevel} onChange={e => setZoomLevel(Number(e.target.value))} style={{width:80}} />
                 <button onClick={handleOptimize} disabled={loading} style={{background:'#2563eb', color:'white', border:'none', padding:'8px 16px', borderRadius:6, cursor:'pointer'}}>{loading ? '...' : '⚡ Générer'}</button>
                 <button onClick={() => setShowSidebar(!showSidebar)} style={{background:'white', border:'1px solid #cbd5e1', padding:'8px', borderRadius:6, cursor:'pointer'}}>⚙️</button>
@@ -524,7 +498,7 @@ function App() {
                             optionalCoverage={optionalCoverage} onToggleOptionalCoverage={handleToggleOptionalCoverage}
                             onToggleGlobalOptional={handleToggleGlobalOptional}
                             onUpdateBalance={handleUpdateBalance}
-                            onToggleRowSoft={handleToggleRowSoft} // NOUVELLE PROP PASSÉE AU TABLEAU
+                            onToggleRowSoft={handleToggleRowSoft}
                         />
                     )}
                     {activeTab === 'bilan' && <Bilan planning={planning} config={config} year={year} startDay={startDay} endDay={endDay} />}
@@ -554,7 +528,7 @@ function App() {
                             <button onClick={handleAddBureau} style={{fontSize:11, padding:'4px 8px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:4, cursor:'pointer', fontWeight:'bold'}}>+ Ajouter</button>
                         </div>
                         <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
-                            {(config.CONTROLLERS_AFFECTES_BUREAU ||[]).map((agent: string) => (
+                            {(config.CONTROLLERS_AFFECTES_BUREAU || []).map((agent: string) => (
                                 <div key={agent} style={{display:'flex', alignItems:'center', gap:4, background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:4, padding:'2px 6px', fontSize:11, color:'#1e40af', fontWeight:600}}>{agent}<span onClick={() => handleRemoveBureau(agent)} style={{cursor:'pointer', color:'#ef4444', fontWeight:'bold', marginLeft:2}}>×</span></div>
                             ))}
                         </div>
@@ -567,6 +541,9 @@ function App() {
                         <div style={rowStyle}><label style={labelStyle}>Jour Fin</label><input type="number" value={endDay} onChange={e=>setEndDay(Number(e.target.value))} style={numberInputStyle}/></div>
                         <div style={{height:1, background:'#f1f5f9', margin:'10px 0'}}></div>
                         
+                        {/* REGLAGE JOURS FIGÉS (NOUVEAU) */}
+                        <div style={rowStyle}><label style={labelStyle}>Jour Figé (Historique)</label><input type="number" value={config.CONTRAT.LOCKED_UNTIL_DAY || 0} onChange={e=>handleContratChange('LOCKED_UNTIL_DAY', e.target.value)} style={{...numberInputStyle, color:'#64748b'}} title="Tous les jours jusqu'à cette valeur incluse ne seront pas modifiés par le solveur." /></div>
+
                         <div style={rowStyle}><label style={labelStyle}>Tolérance Cible</label><input type="number" value={config.CONTRAT.MAX_SHIFT_TOLERANCE ?? 1} onChange={e=>handleContratChange('MAX_SHIFT_TOLERANCE', e.target.value)} style={{...numberInputStyle, color:'#d97706'}} /></div>
                         
                         <div style={rowStyle}><label style={labelStyle}>Temps Limite (sec)</label><input type="number" value={config.CONTRAT.SOLVER_TIME_LIMIT || 25} onChange={e=>handleContratChange('SOLVER_TIME_LIMIT', e.target.value)} style={{...numberInputStyle, color:'#3b82f6', fontWeight:'bold'}} /></div>
