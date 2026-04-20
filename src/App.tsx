@@ -33,7 +33,7 @@ const tagStyle = (col: string, bg: string, bord: string): React.CSSProperties =>
 
 const DEFAULT_CONFIG: AppConfig = {
   ANNEE: 2026,
-  CONTROLEURS: [],
+  CONTROLEURS: ["GAO", "WBR", "PLC", "CML", "BBD", "LAK", "MZN", "TRT", "CLO", "LNN", "KGR", "FRD", "DAZ", "GNC", "DTY", "JCT"],
   CONTROLLERS_AFFECTES_BUREAU: [],
   CONTROLLERS_PARITE_STRICTE: [],
   AGENT_WORK_RATES: {},
@@ -57,7 +57,7 @@ const DEFAULT_CONFIG: AppConfig = {
     MAX_SHIFT_TOLERANCE: 1,
     BUFFER_DAYS: 4,
     REQUIRE_2_CONSECUTIVE_REST_DAYS: true,
-    LOCKED_UNTIL_DAY: 0 // Par défaut : Aucun jour bloqué
+    LOCKED_UNTIL_DAY: 0
   }
 };
 
@@ -149,7 +149,6 @@ function App() {
       const currentCycles = config.CYCLES || {};
       const agentCycles = currentCycles[selectedAgentConfig] || { OR: [], ARGENT: [] };
       const list = agentCycles[type] || [];
-      
       if (list.some((pair: string[]) => pair[0] === v1 && pair[1] === v2)) return;
 
       const newAgentCycles = { ...agentCycles, [type]: [...list, [v1, v2]] };
@@ -201,6 +200,96 @@ function App() {
       }
   };
 
+  // ==========================================
+  // NOUVEAU : GESTION DES AGENTS DANS L'UI
+  // ==========================================
+
+  const handleAddAgent = () => {
+      const newAgent = window.prompt("Trigramme du nouveau contrôleur ?")?.toUpperCase().trim();
+      if (!newAgent) return;
+      
+      const currentList = config.CONTROLEURS || [];
+      if (currentList.includes(newAgent)) {
+          alert("Ce contrôleur existe déjà !");
+          return;
+      }
+      updateConfig({ ...config, CONTROLEURS: [...currentList, newAgent] });
+      setSelectedAgentConfig(newAgent); 
+  };
+
+  const handleRenameAgent = (oldName: string) => {
+      const newName = window.prompt(`Renommer ${oldName} en :`, oldName)?.toUpperCase().trim();
+      if (!newName || newName === oldName) return;
+
+      const currentList = config.CONTROLEURS || [];
+      if (currentList.includes(newName)) {
+          alert("Ce nom est déjà utilisé !");
+          return;
+      }
+
+      // Mise à jour de la liste
+      const newList = currentList.map(a => a === oldName ? newName : a);
+      const newConfig = { ...config, CONTROLEURS: newList };
+      
+      // Transfert des paramètres individuels
+      if (newConfig.AGENT_WORK_RATES && newConfig.AGENT_WORK_RATES[oldName]) {
+          newConfig.AGENT_WORK_RATES[newName] = newConfig.AGENT_WORK_RATES[oldName];
+          delete newConfig.AGENT_WORK_RATES[oldName];
+      }
+      if (newConfig.AGENT_BALANCES && newConfig.AGENT_BALANCES[oldName]) {
+          newConfig.AGENT_BALANCES[newName] = newConfig.AGENT_BALANCES[oldName];
+          delete newConfig.AGENT_BALANCES[oldName];
+      }
+      if (newConfig.CONTROLLERS_AFFECTES_BUREAU?.includes(oldName)) {
+          newConfig.CONTROLLERS_AFFECTES_BUREAU = newConfig.CONTROLLERS_AFFECTES_BUREAU.map(a => a === oldName ? newName : a);
+      }
+      if (newConfig.CONTROLLERS_PARITE_STRICTE?.includes(oldName)) {
+          newConfig.CONTROLLERS_PARITE_STRICTE = newConfig.CONTROLLERS_PARITE_STRICTE.map(a => a === oldName ? newName : a);
+      }
+      if (newConfig.CYCLES && newConfig.CYCLES[oldName]) {
+          newConfig.CYCLES[newName] = newConfig.CYCLES[oldName];
+          delete newConfig.CYCLES[oldName];
+      }
+
+      updateConfig(newConfig);
+      if (selectedAgentConfig === oldName) setSelectedAgentConfig(newName);
+  };
+
+  const handleDeleteAgent = (agentToRemove: string) => {
+      if (!window.confirm(`Supprimer DÉFINITIVEMENT le contrôleur ${agentToRemove} et tous ses réglages ?`)) return;
+
+      const currentList = config.CONTROLEURS || [];
+      const newList = currentList.filter(a => a !== agentToRemove);
+      const newConfig = { ...config, CONTROLEURS: newList };
+      
+      // Nettoyage optionnel mais propre
+      if (newConfig.AGENT_WORK_RATES) delete newConfig.AGENT_WORK_RATES[agentToRemove];
+      if (newConfig.AGENT_BALANCES) delete newConfig.AGENT_BALANCES[agentToRemove];
+      if (newConfig.CYCLES) delete newConfig.CYCLES[agentToRemove];
+      if (newConfig.CONTROLLERS_AFFECTES_BUREAU) {
+          newConfig.CONTROLLERS_AFFECTES_BUREAU = newConfig.CONTROLLERS_AFFECTES_BUREAU.filter(a => a !== agentToRemove);
+      }
+      if (newConfig.CONTROLLERS_PARITE_STRICTE) {
+          newConfig.CONTROLLERS_PARITE_STRICTE = newConfig.CONTROLLERS_PARITE_STRICTE.filter(a => a !== agentToRemove);
+      }
+
+      updateConfig(newConfig);
+      if (selectedAgentConfig === agentToRemove) setSelectedAgentConfig("");
+  };
+
+  const handleMoveAgent = (index: number, direction: 'UP' | 'DOWN') => {
+      const list = [...(config.CONTROLEURS || [])];
+      if (direction === 'UP' && index > 0) {
+          [list[index - 1], list[index]] = [list[index], list[index - 1]];
+      } else if (direction === 'DOWN' && index < list.length - 1) {
+          [list[index + 1], list[index]] = [list[index], list[index + 1]];
+      } else {
+          return; 
+      }
+      updateConfig({ ...config, CONTROLEURS: list });
+  };
+
+  // --- DATA ---
   const handleExportConfig = () => {
       const data = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
       const a = document.createElement('a'); a.href = data; a.download = `tds_config_${year}.json`; a.click();
@@ -218,7 +307,6 @@ function App() {
       }
   };
 
-  // --- BOUTONS SOFT (Vue Désidérata) ---
   const handleToggleSoft = (agent: string, day: number) => {
       const key = `${agent}_${day}`;
       const s = new Set(softConstraints);
@@ -291,26 +379,28 @@ function App() {
       setOptionalCoverage(newCov);
   };
 
-  // --- API ---
   const handleImport = async () => {
     setStatus({type:'loading', msg:'📡 Lecture...'});
     try {
         const data = await parseGoogleSheet(sheetUrl, startDay, endDay); 
-        setPreAssignments(data); setSoftConstraints(new Set()); 
-        setStatus({type:'success', msg: `OK (${Object.keys(data).length} agents)`});
+        
+        // 1. Récupération et MAJ de la liste des agents
+        const importedAgents = Object.keys(data);
+        const newConfig = { ...config, CONTROLEURS: importedAgents };
+        updateConfig(newConfig);
+
+        setPreAssignments(data); 
+        setSoftConstraints(new Set()); 
+        setStatus({type:'success', msg: `OK (${importedAgents.length} agents)`});
         setActiveTab('desiderata');
     } catch (e: any) { setStatus({type:'error', msg: `Erreur: ${e.toString()}`}); }
   };
 
   const handleOptimize = async () => {
       setLoading(true); setStatus({type:'loading', msg:'Calcul...'});
-      
-      // On prépare la liste des jours bloqués à envoyer au solver
       const lockedUntil = config.CONTRAT.LOCKED_UNTIL_DAY || 0;
       const lockedDays = [];
-      for(let i = startDay; i <= lockedUntil; i++) {
-          lockedDays.push(i);
-      }
+      for(let i = startDay; i <= lockedUntil; i++) lockedDays.push(i);
 
       try {
           const res = await axios.post(API_URL, {
@@ -318,7 +408,7 @@ function App() {
               pre_assignments: preAssignments,
               soft_assignments: Array.from(softConstraints),
               optional_coverage: optionalCoverage,
-              locked_days: lockedDays // On envoie les jours figés
+              locked_days: lockedDays 
           });
           
           if (res.data.data) { 
@@ -344,6 +434,7 @@ function App() {
 
   const gridData = activeTab === 'desiderata' ? convertPreAssignmentsToRows(preAssignments) : planning;
 
+  // --- RENDU CONFIG TAB ---
   const renderConfigTab = () => {
       const shifts = Object.keys(config.VACATIONS);
       const agentConfig = (config.CYCLES || {})[selectedAgentConfig] || { OR: [], ARGENT: [] };
@@ -356,29 +447,65 @@ function App() {
 
       return (
           <div style={{display:'flex', height:'100%'}}>
-              <div style={{width: 200, borderRight:'1px solid #e2e8f0', overflowY:'auto', background:'#f8fafc', padding:10}}>
-                  <h4 style={{marginTop:0, color:'#64748b', fontSize:11, textTransform:'uppercase'}}>Agents</h4>
-                  {config.CONTROLEURS.map(c => {
-                      const r = (config.AGENT_WORK_RATES && config.AGENT_WORK_RATES[c]) || 100;
-                      return (
-                          <div key={c} onClick={() => setSelectedAgentConfig(c)} style={{
-                                padding:'8px 12px', cursor:'pointer', borderRadius:6, marginBottom:2, fontSize:13, fontWeight:600,
-                                background: selectedAgentConfig === c ? 'white' : 'transparent',
-                                color: selectedAgentConfig === c ? '#2563eb' : '#475569',
-                                boxShadow: selectedAgentConfig === c ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
-                                border: selectedAgentConfig === c ? '1px solid #e2e8f0' : '1px solid transparent',
-                                display: 'flex', justifyContent: 'space-between'
-                            }}>
-                              <span>{c}</span>
-                              {r < 100 && <span style={{fontSize:10, background:'#fee2e2', color:'#ef4444', padding:'0 4px', borderRadius:4}}>{r}%</span>}
-                          </div>
-                      );
-                  })}
+              {/* NOUVELLE LISTE GAUCHE (Éditable) */}
+              <div style={{width: 260, borderRight:'1px solid #e2e8f0', display:'flex', flexDirection:'column', background:'#f8fafc'}}>
+                  
+                  {/* Titre et Bouton Ajout */}
+                  <div style={{padding: '15px 10px', borderBottom: '1px solid #e2e8f0', display:'flex', justifyContent:'space-between', alignItems:'center', background:'white'}}>
+                      <h4 style={{margin:0, color:'#64748b', fontSize:12, textTransform:'uppercase'}}>Agents ({config.CONTROLEURS.length})</h4>
+                      <button 
+                          onClick={handleAddAgent} 
+                          style={{fontSize:11, padding:'4px 8px', background:'#ecfdf5', color:'#10b981', border:'1px solid #a7f3d0', borderRadius:4, cursor:'pointer', fontWeight:'bold'}}
+                      >
+                          + Ajouter
+                      </button>
+                  </div>
+
+                  {/* Liste Scrollable */}
+                  <div style={{flex: 1, overflowY:'auto', padding: 10}}>
+                      {config.CONTROLEURS.map((c, index) => {
+                          const r = (config.AGENT_WORK_RATES && config.AGENT_WORK_RATES[c]) || 100;
+                          const isSelected = selectedAgentConfig === c;
+                          
+                          return (
+                              <div 
+                                key={c} 
+                                onClick={() => setSelectedAgentConfig(c)}
+                                style={{
+                                    padding:'6px 10px', cursor:'pointer', borderRadius:6, marginBottom:4, fontSize:13, fontWeight:600,
+                                    background: isSelected ? 'white' : 'transparent',
+                                    color: isSelected ? '#2563eb' : '#475569',
+                                    boxShadow: isSelected ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                                    border: isSelected ? '1px solid #cbd5e1' : '1px solid transparent',
+                                    display: 'flex', justifyContent: 'space-between', alignItems:'center'
+                                }}
+                              >
+                                  {/* Nom et Taux */}
+                                  <div style={{display:'flex', alignItems:'center', gap: 6}}>
+                                      <span>{c}</span>
+                                      {r < 100 && <span style={{fontSize:10, background:'#fee2e2', color:'#ef4444', padding:'1px 4px', borderRadius:4}}>{r}%</span>}
+                                  </div>
+
+                                  {/* Actions Rapides */}
+                                  {isSelected && (
+                                      <div style={{display:'flex', gap: 4}} onClick={e => e.stopPropagation()}>
+                                          <div style={{display:'flex', flexDirection:'column', gap:1}}>
+                                              <button onClick={() => handleMoveAgent(index, 'UP')} disabled={index === 0} style={{border:'none', background:'transparent', cursor: index === 0 ? 'default':'pointer', padding:0, fontSize:10, opacity: index === 0 ? 0.3 : 1}}>▲</button>
+                                              <button onClick={() => handleMoveAgent(index, 'DOWN')} disabled={index === config.CONTROLEURS.length - 1} style={{border:'none', background:'transparent', cursor: index === config.CONTROLEURS.length - 1 ? 'default':'pointer', padding:0, fontSize:10, opacity: index === config.CONTROLEURS.length - 1 ? 0.3 : 1}}>▼</button>
+                                          </div>
+                                          <button onClick={() => handleRenameAgent(c)} title="Renommer" style={{border:'none', background:'#f1f5f9', color:'#475569', borderRadius:4, cursor:'pointer', padding:'2px 6px', fontSize:11}}>✏️</button>
+                                          <button onClick={() => handleDeleteAgent(c)} title="Supprimer" style={{border:'none', background:'#fee2e2', color:'#ef4444', borderRadius:4, cursor:'pointer', padding:'2px 6px', fontSize:11}}>❌</button>
+                                      </div>
+                                  )}
+                              </div>
+                          );
+                      })}
+                  </div>
               </div>
 
               <div style={{flex:1, padding:30, overflowY:'auto'}}>
                   {!selectedAgentConfig ? (
-                      <div style={{color:'#94a3b8', textAlign:'center', marginTop:50}}>Sélectionnez un agent à gauche.</div>
+                      <div style={{color:'#94a3b8', textAlign:'center', marginTop:50}}>Sélectionnez un agent à gauche pour configurer ses habitudes.</div>
                   ) : (
                       <div>
                           <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:30, borderBottom:'1px solid #e2e8f0', paddingBottom:20}}>
@@ -541,9 +668,7 @@ function App() {
                         <div style={rowStyle}><label style={labelStyle}>Jour Fin</label><input type="number" value={endDay} onChange={e=>setEndDay(Number(e.target.value))} style={numberInputStyle}/></div>
                         <div style={{height:1, background:'#f1f5f9', margin:'10px 0'}}></div>
                         
-                        {/* REGLAGE JOURS FIGÉS (NOUVEAU) */}
                         <div style={rowStyle}><label style={labelStyle}>Jour Figé (Historique)</label><input type="number" value={config.CONTRAT.LOCKED_UNTIL_DAY || 0} onChange={e=>handleContratChange('LOCKED_UNTIL_DAY', e.target.value)} style={{...numberInputStyle, color:'#64748b'}} title="Tous les jours jusqu'à cette valeur incluse ne seront pas modifiés par le solveur." /></div>
-
                         <div style={rowStyle}><label style={labelStyle}>Tolérance Cible</label><input type="number" value={config.CONTRAT.MAX_SHIFT_TOLERANCE ?? 1} onChange={e=>handleContratChange('MAX_SHIFT_TOLERANCE', e.target.value)} style={{...numberInputStyle, color:'#d97706'}} /></div>
                         
                         <div style={rowStyle}><label style={labelStyle}>Temps Limite (sec)</label><input type="number" value={config.CONTRAT.SOLVER_TIME_LIMIT || 25} onChange={e=>handleContratChange('SOLVER_TIME_LIMIT', e.target.value)} style={{...numberInputStyle, color:'#3b82f6', fontWeight:'bold'}} /></div>
