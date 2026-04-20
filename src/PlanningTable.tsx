@@ -14,7 +14,7 @@ const safeString = (val: any): string => {
     return String(val);
 };
 
-// --- 1. HEADER GLOBAL (Vue Désidérata) ---
+// --- 1. HEADER GLOBAL (Vue Désidérata - GRILLE 2 COLONNES) ---
 const GlobalHeader = (props: any) => {
     const { config, context } = props;
     const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
@@ -56,7 +56,7 @@ const GlobalHeader = (props: any) => {
     );
 };
 
-// --- 2. HEADER RÉSUMÉ (Vue Planning) ---
+// --- 2. HEADER RÉSUMÉ (Vue Planning - COMPACT) ---
 const SummaryHeader = (props: any) => {
     const { api, config, context } = props;
     const { daysList } = context; 
@@ -70,7 +70,7 @@ const SummaryHeader = (props: any) => {
     if (api && daysList) {
         daysList.forEach((dayNum: number) => {
             const lockedUntil = config?.CONTRAT?.LOCKED_UNTIL_DAY || 0;
-            if (dayNum <= lockedUntil) return; // Ne compte pas les manquants du passé
+            if (dayNum <= lockedUntil) return;
 
             const dayStr = safeString(dayNum);
             const presentOnDay = new Set<string>();
@@ -201,7 +201,7 @@ const CustomHeader = (props: any) => {
     );
 };
 
-// --- 4. AGENT CELL (Calcul Cible Modifié) ---
+// --- 4. AGENT CELL (MODIFIÉ: SYNCHRONISATION DU CALCUL DE LA CIBLE) ---
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
     const rowData = props.data;
@@ -218,7 +218,7 @@ const AgentCellRenderer = (props: any) => {
     let refusedCount = 0; 
     let softCount = 0;
     
-    // NOUVEAU : On compte les jours figés
+    // On doit connaître le nombre de jours figés pour calculer les "jours actifs" restants
     let lockedDaysCount = 0;
     const lockedUntil = config?.CONTRAT?.LOCKED_UNTIL_DAY || 0;
 
@@ -227,14 +227,18 @@ const AgentCellRenderer = (props: any) => {
             const dayStr = safeString(dayNum);
             const actualCode = normalize(rowData[dayStr]);
 
-            // Comptage des jours figés
             if (dayNum <= lockedUntil) {
                 lockedDaysCount++;
             } else {
-                // On ne compte le travail effectif / congés QUE sur la période active
+                // On ne comptabilise le travail et les congés QUE sur la période active
                 if (actualCode && actualCode !== '' && actualCode !== 'OFF') {
-                    if (actualCode === 'C') leaves++;
-                    else worked++;
+                    if (actualCode === 'C') {
+                        leaves++;
+                    } else if (config.VACATIONS[actualCode] !== undefined) {
+                        worked++; // Vraie vacation
+                    } else {
+                        leaves++; // Autre occupation (Stage, Réunion...) => Neutralise la cible comme un congé
+                    }
                 }
 
                 // Statistiques Soft / Refus uniquement sur la période active
@@ -253,15 +257,12 @@ const AgentCellRenderer = (props: any) => {
         });
     }
 
-    // --- CALCUL DE LA CIBLE ---
     const totalDays = daysList ? daysList.length : 0;
-    // Jours restants = Total jours de la grille - Jours figés
-    const activeDays = Math.max(0, totalDays - lockedDaysCount); 
-    
+    const activeDaysCount = Math.max(0, totalDays - lockedDaysCount);
+
+    // Calcul de la Cible (Même formule stricte que dans Bilan.tsx et solver.py)
     const workRate = (config?.AGENT_WORK_RATES && config.AGENT_WORK_RATES[agentName]) || 100;
-    
-    // Formule : Taux% * (Jours Actifs - Congés) / 2
-    const baseTarget = Math.ceil((workRate / 100) * (activeDays - leaves) / 2);
+    const baseTarget = Math.ceil((workRate / 100) * (activeDaysCount - leaves) / 2);
     
     const balance = (config?.AGENT_BALANCES && config.AGENT_BALANCES[agentName]) || 0;
     const finalTarget = Math.max(0, baseTarget + balance);
@@ -269,17 +270,18 @@ const AgentCellRenderer = (props: any) => {
     const statsColor = isDesiderataView ? '#64748b' : (worked >= (finalTarget - 1) ? '#16a34a' : '#ea580c');
     const isBureau = (config?.CONTROLLERS_AFFECTES_BUREAU ||[]).includes(agentName);
     
+    const nameStyle = { 
+        fontWeight: '800', 
+        fontSize: 13, 
+        color: isBureau ? '#2563eb' : '#334155',
+        cursor: isDesiderataView ? 'pointer' : 'default',
+        textDecoration: isDesiderataView ? 'underline dotted #94a3b8' : 'none'
+    };
+
     const handleRowClick = (e: React.MouseEvent) => {
         if (!isDesiderataView || !onToggleRowSoft) return;
         e.stopPropagation();
         onToggleRowSoft(agentName);
-    };
-
-    const nameStyle = { 
-        fontWeight: '800', fontSize: 13, 
-        color: isBureau ? '#2563eb' : '#334155',
-        cursor: isDesiderataView ? 'pointer' : 'default',
-        textDecoration: isDesiderataView ? 'underline dotted #94a3b8' : 'none'
     };
 
     const handleBalanceClick = (e: React.MouseEvent) => {
@@ -352,7 +354,9 @@ const ShiftCellRenderer = (props: any) => {
 
     const getBorderStyle = () => {
         if (isDesiderataView) return isSoft ? '2px solid #9333ea' : '1px solid #cbd5e1';
+        
         if (isLocked) return `1px solid ${style.border}`;
+
         if (showDesiderataMatch && hasRequest) return isMatch ? '2px solid #16a34a' : '2px solid #ef4444';
         return `1px solid ${style.border}`;
     };
