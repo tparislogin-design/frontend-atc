@@ -33,7 +33,7 @@ const tagStyle = (col: string, bg: string, bord: string): React.CSSProperties =>
 
 const DEFAULT_CONFIG: AppConfig = {
   ANNEE: 2026,
-  CONTROLEURS: ["GAO", "WBR", "PLC", "CML", "BBD", "LAK", "MZN", "TRT", "CLO", "LNN", "KGR", "FRD", "DAZ", "GNC", "DTY", "JCT"],
+  CONTROLEURS: [],
   CONTROLLERS_AFFECTES_BUREAU: [],
   CONTROLLERS_PARITE_STRICTE: [],
   AGENT_WORK_RATES: {},
