@@ -14,7 +14,7 @@ const safeString = (val: any): string => {
     return String(val);
 };
 
-// --- 1. HEADER GLOBAL (Vue Désidérata - GRILLE 2 COLONNES) ---
+// --- 1. HEADER GLOBAL (Vue Désidérata) ---
 const GlobalHeader = (props: any) => {
     const { config, context } = props;
     const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
@@ -56,7 +56,7 @@ const GlobalHeader = (props: any) => {
     );
 };
 
-// --- 2. HEADER RÉSUMÉ (Vue Planning - COMPACT) ---
+// --- 2. HEADER RÉSUMÉ (Vue Planning) ---
 const SummaryHeader = (props: any) => {
     const { api, config, context } = props;
     const { daysList } = context; 
@@ -69,9 +69,8 @@ const SummaryHeader = (props: any) => {
 
     if (api && daysList) {
         daysList.forEach((dayNum: number) => {
-            // On ne compte pas les manquants sur les jours figés !
             const lockedUntil = config?.CONTRAT?.LOCKED_UNTIL_DAY || 0;
-            if (dayNum <= lockedUntil) return;
+            if (dayNum <= lockedUntil) return; // Ne compte pas les manquants du passé
 
             const dayStr = safeString(dayNum);
             const presentOnDay = new Set<string>();
@@ -111,7 +110,7 @@ const SummaryHeader = (props: any) => {
         <div style={boxStyle}>
             <div style={{fontSize: 9, fontWeight: '800', color: '#64748b', marginBottom: 4, textTransform:'uppercase'}}>MANQUANTS</div>
             {summary.length === 0 ? <div style={{fontSize: 20}}>✅</div> : (
-                <div style={{textAlign:'center', lineHeight:'1.2', fontSize: 10, fontWeight:'600', color:'#ef4444'}}>
+                <div style={{textAlign:'center', lineHeight:'1.2', fontSize: 10, fontWeight:'600', color:'#ef4444', overflowY:'auto', maxHeight:'80px', width:'100%'}}>
                     {summary.map(([shift, count], idx) => (
                         <span key={shift}><span style={{fontWeight:'800'}}>{count}</span>x{shift}{idx < summary.length - 1 ? ', ' : ''}</span>
                     ))}
@@ -139,7 +138,6 @@ const CustomHeader = (props: any) => {
         });
     }
     
-    // Si c'est figé, on considère qu'il ne manque rien (c'est l'historique)
     let missingShifts: string[] =[];
     if (!isLocked) {
         missingShifts = targetShifts.filter((code: string) => !presentShifts.has(code));
@@ -162,7 +160,6 @@ const CustomHeader = (props: any) => {
             paddingTop: 4, paddingBottom: 2, boxSizing:'border-box',
             borderRight: '1px solid #bdc3c7', 
             borderBottom: `1px solid #bdc3c7`, 
-            // Couleur de fond grise si figé
             background: isLocked ? '#e2e8f0' : (missingShifts.length > 0 && !isDesiderataView) ? '#fff' : (isDesiderataView ? '#fff' : '#f0fdf4'),
             position: 'relative'
         }}>
@@ -204,7 +201,7 @@ const CustomHeader = (props: any) => {
     );
 };
 
-// --- 4. AGENT CELL ---
+// --- 4. AGENT CELL (Calcul Cible Modifié) ---
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
     const rowData = props.data;
@@ -216,54 +213,73 @@ const AgentCellRenderer = (props: any) => {
         return s;
     };
 
-    let worked = 0; let leaves = 0; let refusedCount = 0; let softCount = 0;
+    let worked = 0; 
+    let leaves = 0; 
+    let refusedCount = 0; 
+    let softCount = 0;
+    
+    // NOUVEAU : On compte les jours figés
+    let lockedDaysCount = 0;
+    const lockedUntil = config?.CONTRAT?.LOCKED_UNTIL_DAY || 0;
+
     if (daysList && rowData && config) {
         daysList.forEach((dayNum: number) => {
             const dayStr = safeString(dayNum);
             const actualCode = normalize(rowData[dayStr]);
 
-            if (actualCode && actualCode !== '' && actualCode !== 'OFF') {
-                if (actualCode === 'C') leaves++;
-                else worked++;
-            }
-
-            // GESTION VUE DÉSIDÉRATA VS PLANNING
-            if (isDesiderataView) {
-                if (softConstraints && softConstraints.has(`${agentName}_${dayNum}`)) softCount++;
+            // Comptage des jours figés
+            if (dayNum <= lockedUntil) {
+                lockedDaysCount++;
             } else {
-                if (preAssignments && preAssignments[agentName]) {
-                    const req = preAssignments[agentName][dayStr];
-                    if (req) {
-                        const allowed = safeString(req).split(/[,/ ]+/).map((s: string) => normalize(s)).filter((s: string) => s !== '');
-                        if (allowed.length > 0 && !allowed.includes(actualCode)) refusedCount++;
+                // On ne compte le travail effectif / congés QUE sur la période active
+                if (actualCode && actualCode !== '' && actualCode !== 'OFF') {
+                    if (actualCode === 'C') leaves++;
+                    else worked++;
+                }
+
+                // Statistiques Soft / Refus uniquement sur la période active
+                if (isDesiderataView) {
+                    if (softConstraints && softConstraints.has(`${agentName}_${dayNum}`)) softCount++;
+                } else {
+                    if (preAssignments && preAssignments[agentName]) {
+                        const req = preAssignments[agentName][dayStr];
+                        if (req) {
+                            const allowed = safeString(req).split(/[,/ ]+/).map((s: string) => normalize(s)).filter((s: string) => s !== '');
+                            if (allowed.length > 0 && !allowed.includes(actualCode)) refusedCount++;
+                        }
                     }
                 }
             }
         });
     }
 
+    // --- CALCUL DE LA CIBLE ---
     const totalDays = daysList ? daysList.length : 0;
+    // Jours restants = Total jours de la grille - Jours figés
+    const activeDays = Math.max(0, totalDays - lockedDaysCount); 
+    
     const workRate = (config?.AGENT_WORK_RATES && config.AGENT_WORK_RATES[agentName]) || 100;
-    const baseTarget = Math.ceil((workRate / 100) * (totalDays - leaves) / 2);
+    
+    // Formule : Taux% * (Jours Actifs - Congés) / 2
+    const baseTarget = Math.ceil((workRate / 100) * (activeDays - leaves) / 2);
     
     const balance = (config?.AGENT_BALANCES && config.AGENT_BALANCES[agentName]) || 0;
-    const finalTarget = baseTarget + balance;
+    const finalTarget = Math.max(0, baseTarget + balance);
     
     const statsColor = isDesiderataView ? '#64748b' : (worked >= (finalTarget - 1) ? '#16a34a' : '#ea580c');
     const isBureau = (config?.CONTROLLERS_AFFECTES_BUREAU ||[]).includes(agentName);
     
-    const nameStyle = { 
-        fontWeight: '800', 
-        fontSize: 13, 
-        color: isBureau ? '#2563eb' : '#334155',
-        cursor: isDesiderataView ? 'pointer' : 'default',
-        textDecoration: isDesiderataView ? 'underline dotted #94a3b8' : 'none'
-    };
-
     const handleRowClick = (e: React.MouseEvent) => {
         if (!isDesiderataView || !onToggleRowSoft) return;
         e.stopPropagation();
         onToggleRowSoft(agentName);
+    };
+
+    const nameStyle = { 
+        fontWeight: '800', fontSize: 13, 
+        color: isBureau ? '#2563eb' : '#334155',
+        cursor: isDesiderataView ? 'pointer' : 'default',
+        textDecoration: isDesiderataView ? 'underline dotted #94a3b8' : 'none'
     };
 
     const handleBalanceClick = (e: React.MouseEvent) => {
@@ -280,7 +296,9 @@ const AgentCellRenderer = (props: any) => {
         <div style={{display:'flex', flexDirection:'column', justifyContent:'center', height:'100%', paddingLeft: 8}}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                 <span onClick={handleRowClick} style={nameStyle} title={isDesiderataView ? "Clic pour basculer toute la ligne en Soft/Hard" : ""}>
-                    {agentName} {isBureau && ' 🏢'} {workRate < 100 && <span style={{fontSize:10, color:'#ef4444', marginLeft:4}}>{workRate}%</span>}
+                    {agentName} 
+                    {isBureau && ' 🏢'}
+                    {workRate < 100 && <span style={{fontSize:10, color:'#ef4444', marginLeft:4}}>{workRate}%</span>}
                 </span>
             </div>
             <div style={{display:'flex', alignItems:'center', gap: 8, marginTop: 2}}>
@@ -292,7 +310,7 @@ const AgentCellRenderer = (props: any) => {
                     </span>
                 </div>
                 {isDesiderataView ? (
-                    softCount > 0 && ( <div title={`${softCount} demande(s) Soft`} style={{fontSize: 9, color: '#9333ea', fontWeight: '800', background: '#f3e8ff', padding: '1px 4px', borderRadius: '4px', border: '1px solid #d8b4fe'}}>{softCount} 🟣</div> )
+                    softCount > 0 && ( <div title={`${softCount} demandes Soft`} style={{fontSize: 9, color: '#9333ea', fontWeight: '800', background: '#f3e8ff', padding: '1px 4px', borderRadius: '4px', border: '1px solid #d8b4fe'}}>{softCount} 🟣</div> )
                 ) : (
                     refusedCount > 0 && ( <div title={`${refusedCount} demande(s) non respectée(s)`} style={{fontSize: 9, color: '#ef4444', fontWeight: '800', background: '#fee2e2', padding: '1px 4px', borderRadius: '4px', border: '1px solid #fca5a5'}}>{refusedCount} ⚠️</div> )
                 )}
@@ -334,10 +352,7 @@ const ShiftCellRenderer = (props: any) => {
 
     const getBorderStyle = () => {
         if (isDesiderataView) return isSoft ? '2px solid #9333ea' : '1px solid #cbd5e1';
-        
-        // Si c'est figé, on ne met pas de bordure rouge (car c'est le passé)
         if (isLocked) return `1px solid ${style.border}`;
-
         if (showDesiderataMatch && hasRequest) return isMatch ? '2px solid #16a34a' : '2px solid #ef4444';
         return `1px solid ${style.border}`;
     };
@@ -380,7 +395,6 @@ const ShiftCellRenderer = (props: any) => {
     const isGreen = finalBorder.includes('#16a34a');
     const isPurple = finalBorder.includes('#9333ea');
 
-    // On ternit légèrement les cellules figées (sauf si OFF caché)
     const finalOpacity = (isLocked && displayVal !== 'OFF') ? 0.7 : 1;
 
     return (
