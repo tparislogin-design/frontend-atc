@@ -11,7 +11,7 @@ import { convertPreAssignmentsToRows } from './utils/dataConverters';
 import { decimalToTime, timeToDecimal } from './utils/timeConverters';
 
 // Import de TYPE
-import type { AppConfig } from './utils/types';
+import type { AppConfig, ExclusionRule } from './utils/types';
 
 const API_URL = "https://ttttty-ty.hf.space/api/optimize"; 
 
@@ -33,11 +33,13 @@ const tagStyle = (col: string, bg: string, bord: string): React.CSSProperties =>
 
 const DEFAULT_CONFIG: AppConfig = {
   ANNEE: 2026,
+  SHEET_URL: "https://docs.google.com/spreadsheets/d/1lLtFisk983kJ-Yu0rtPyJAoweHxnsKwzen_J1rxsJes/edit", // Par défaut
   CONTROLEURS: ["GAO", "WBR", "PLC", "CML", "BBD", "LAK", "MZN", "TRT", "CLO", "LNN", "KGR", "FRD", "DAZ", "GNC", "DTY", "JCT"],
   CONTROLLERS_AFFECTES_BUREAU: [],
   CONTROLLERS_PARITE_STRICTE: [],
   AGENT_WORK_RATES: {},
   AGENT_BALANCES: {},
+  EXCLUSIONS: [], // NOUVEAU
   VACATIONS: { 
     "M":  { debut: 5.5, fin: 12.75 },
     "J1": { debut: 7.5, fin: 15.5 },
@@ -78,7 +80,6 @@ function App() {
   const [year, setYear] = useState(2026);
   const [startDay, setStartDay] = useState(1); 
   const [endDay, setEndDay] = useState(28);
-  const [sheetUrl, setSheetUrl] = useState("https://docs.google.com/spreadsheets/d/1lLtFisk983kJ-Yu0rtPyJAoweHxnsKwzen_J1rxsJes/edit");
   
   const [preAssignments, setPreAssignments] = useState<any>({});
   const [planning, setPlanning] = useState<any[]>([]);
@@ -94,12 +95,18 @@ function App() {
   const [showDesiderataMatch, setShowDesiderataMatch] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
 
-  // États Config
+  // États Config (Cycles)
   const [selectedAgentConfig, setSelectedAgentConfig] = useState<string>("");
   const [newCycleOr1, setNewCycleOr1] = useState("");
   const [newCycleOr2, setNewCycleOr2] = useState("");
   const [newCycleAg1, setNewCycleAg1] = useState("");
   const [newCycleAg2, setNewCycleAg2] = useState("");
+
+  // Nouveaux états Config (Exclusions)
+  const [exclA1, setExclA1] = useState("");
+  const [exclA2, setExclA2] = useState("");
+  const [exclStrict, setExclStrict] = useState(true);
+  const [exclDays, setExclDays] = useState<number[]>([]); // Vide = tous les jours
 
   useEffect(() => {
     const saved = localStorage.getItem('tds_config');
@@ -110,11 +117,14 @@ function App() {
     }
   }, []);
 
-  // --- CONFIG HELPERS ---
   const updateConfig = (newConfig: AppConfig) => { setConfig(newConfig); localStorage.setItem('tds_config', JSON.stringify(newConfig)); };
   const handleYearChange = (val: string) => { setYear(parseInt(val) || 2026); updateConfig({ ...config, ANNEE: parseInt(val) || 2026 }); };
   const handleContratChange = (field: keyof typeof config.CONTRAT, val: string) => { updateConfig({ ...config, CONTRAT: { ...config.CONTRAT, [field]: parseInt(val) || 0 } }); };
   
+  // Remplacer sheetUrl par config.SHEET_URL
+  const handleUrlChange = (url: string) => { updateConfig({ ...config, SHEET_URL: url }); };
+
+  // --- HANDLERS (Vacations, Bureau, Cycles...) ---
   const handleAddVacation = () => {
       const code = window.prompt("Code ?")?.toUpperCase().trim();
       if (!code || config.VACATIONS[code]) return;
@@ -140,6 +150,40 @@ function App() {
       updateConfig({ ...config, CONTROLLERS_AFFECTES_BUREAU: (config.CONTROLLERS_AFFECTES_BUREAU || []).filter(a => a !== agent) });
   };
 
+  // --- NOUVEAU : HANDLERS EXCLUSIONS ---
+  const handleAddExclusion = () => {
+      if (!exclA1 || !exclA2) return alert("Sélectionnez 2 agents.");
+      if (exclA1 === exclA2) return alert("Un agent ne peut s'exclure lui-même.");
+      
+      const newExcl: ExclusionRule = {
+          agent1: exclA1,
+          agent2: exclA2,
+          isStrict: exclStrict,
+          days: exclDays
+      };
+      
+      const currentList = config.EXCLUSIONS || [];
+      updateConfig({ ...config, EXCLUSIONS: [...currentList, newExcl] });
+      
+      // Reset form
+      setExclA1(""); setExclA2(""); setExclDays([]); setExclStrict(true);
+  };
+  
+  const handleDeleteExclusion = (idx: number) => {
+      const currentList = [...(config.EXCLUSIONS || [])];
+      currentList.splice(idx, 1);
+      updateConfig({ ...config, EXCLUSIONS: currentList });
+  };
+
+  const toggleExclusionDay = (dayIndex: number) => {
+      if (exclDays.includes(dayIndex)) {
+          setExclDays(exclDays.filter(d => d !== dayIndex));
+      } else {
+          setExclDays([...exclDays, dayIndex].sort((a,b) => a-b));
+      }
+  };
+
+  // --- CYCLES & TAUX ---
   const handleAddCycle = (type: 'OR' | 'ARGENT') => {
       if (!selectedAgentConfig) return;
       const v1 = type === 'OR' ? newCycleOr1 : newCycleAg1;
@@ -200,19 +244,12 @@ function App() {
       }
   };
 
-  // ==========================================
-  // NOUVEAU : GESTION DES AGENTS DANS L'UI
-  // ==========================================
-
+  // --- GESTION AGENTS UI ---
   const handleAddAgent = () => {
       const newAgent = window.prompt("Trigramme du nouveau contrôleur ?")?.toUpperCase().trim();
       if (!newAgent) return;
-      
       const currentList = config.CONTROLEURS || [];
-      if (currentList.includes(newAgent)) {
-          alert("Ce contrôleur existe déjà !");
-          return;
-      }
+      if (currentList.includes(newAgent)) return alert("Ce contrôleur existe déjà !");
       updateConfig({ ...config, CONTROLEURS: [...currentList, newAgent] });
       setSelectedAgentConfig(newAgent); 
   };
@@ -220,18 +257,12 @@ function App() {
   const handleRenameAgent = (oldName: string) => {
       const newName = window.prompt(`Renommer ${oldName} en :`, oldName)?.toUpperCase().trim();
       if (!newName || newName === oldName) return;
-
       const currentList = config.CONTROLEURS || [];
-      if (currentList.includes(newName)) {
-          alert("Ce nom est déjà utilisé !");
-          return;
-      }
+      if (currentList.includes(newName)) return alert("Nom déjà utilisé !");
 
-      // Mise à jour de la liste
       const newList = currentList.map(a => a === oldName ? newName : a);
       const newConfig = { ...config, CONTROLEURS: newList };
       
-      // Transfert des paramètres individuels
       if (newConfig.AGENT_WORK_RATES && newConfig.AGENT_WORK_RATES[oldName]) {
           newConfig.AGENT_WORK_RATES[newName] = newConfig.AGENT_WORK_RATES[oldName];
           delete newConfig.AGENT_WORK_RATES[oldName];
@@ -251,6 +282,15 @@ function App() {
           delete newConfig.CYCLES[oldName];
       }
 
+      // MAJ EXCLUSIONS
+      if (newConfig.EXCLUSIONS) {
+          newConfig.EXCLUSIONS = newConfig.EXCLUSIONS.map(e => ({
+              ...e,
+              agent1: e.agent1 === oldName ? newName : e.agent1,
+              agent2: e.agent2 === oldName ? newName : e.agent2
+          }));
+      }
+
       updateConfig(newConfig);
       if (selectedAgentConfig === oldName) setSelectedAgentConfig(newName);
   };
@@ -262,7 +302,6 @@ function App() {
       const newList = currentList.filter(a => a !== agentToRemove);
       const newConfig = { ...config, CONTROLEURS: newList };
       
-      // Nettoyage optionnel mais propre
       if (newConfig.AGENT_WORK_RATES) delete newConfig.AGENT_WORK_RATES[agentToRemove];
       if (newConfig.AGENT_BALANCES) delete newConfig.AGENT_BALANCES[agentToRemove];
       if (newConfig.CYCLES) delete newConfig.CYCLES[agentToRemove];
@@ -271,6 +310,10 @@ function App() {
       }
       if (newConfig.CONTROLLERS_PARITE_STRICTE) {
           newConfig.CONTROLLERS_PARITE_STRICTE = newConfig.CONTROLLERS_PARITE_STRICTE.filter(a => a !== agentToRemove);
+      }
+      // SUPPRESSION EXCLUSIONS LIÉES
+      if (newConfig.EXCLUSIONS) {
+          newConfig.EXCLUSIONS = newConfig.EXCLUSIONS.filter(e => e.agent1 !== agentToRemove && e.agent2 !== agentToRemove);
       }
 
       updateConfig(newConfig);
@@ -289,7 +332,7 @@ function App() {
       updateConfig({ ...config, CONTROLEURS: list });
   };
 
-  // --- DATA ---
+  // --- EXPORT/IMPORT JSON ---
   const handleExportConfig = () => {
       const data = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
       const a = document.createElement('a'); a.href = data; a.download = `tds_config_${year}.json`; a.click();
@@ -307,6 +350,7 @@ function App() {
       }
   };
 
+  // --- BOUTONS D'ACTIONS TAB ---
   const handleToggleSoft = (agent: string, day: number) => {
       const key = `${agent}_${day}`;
       const s = new Set(softConstraints);
@@ -379,18 +423,17 @@ function App() {
       setOptionalCoverage(newCov);
   };
 
+  // --- API ---
   const handleImport = async () => {
     setStatus({type:'loading', msg:'📡 Lecture...'});
     try {
-        const data = await parseGoogleSheet(sheetUrl, startDay, endDay); 
+        const urlToUse = config.SHEET_URL || "https://docs.google.com/spreadsheets/d/1lLtFisk983kJ-Yu0rtPyJAoweHxnsKwzen_J1rxsJes/edit";
+        const data = await parseGoogleSheet(urlToUse, startDay, endDay); 
         
-        // 1. Récupération et MAJ de la liste des agents
         const importedAgents = Object.keys(data);
-        const newConfig = { ...config, CONTROLEURS: importedAgents };
-        updateConfig(newConfig);
+        updateConfig({ ...config, CONTROLEURS: importedAgents });
 
-        setPreAssignments(data); 
-        setSoftConstraints(new Set()); 
+        setPreAssignments(data); setSoftConstraints(new Set()); 
         setStatus({type:'success', msg: `OK (${importedAgents.length} agents)`});
         setActiveTab('desiderata');
     } catch (e: any) { setStatus({type:'error', msg: `Erreur: ${e.toString()}`}); }
@@ -398,7 +441,7 @@ function App() {
 
   const handleOptimize = async () => {
       setLoading(true); setStatus({type:'loading', msg:'Calcul...'});
-      const lockedUntil = config.CONTRAT.LOCKED_UNTIL_DAY || 0;
+      const lockedUntil = config.CONTRAT?.LOCKED_UNTIL_DAY || 0;
       const lockedDays = [];
       for(let i = startDay; i <= lockedUntil; i++) lockedDays.push(i);
 
@@ -418,9 +461,7 @@ function App() {
                   generatedPlanning.sort((a: any, b: any) => {
                       const idxA = desiredOrder.indexOf(a.Agent);
                       const idxB = desiredOrder.indexOf(b.Agent);
-                      const safeIdxA = idxA === -1 ? 9999 : idxA;
-                      const safeIdxB = idxB === -1 ? 9999 : idxB;
-                      return safeIdxA - safeIdxB;
+                      return (idxA === -1 ? 9999 : idxA) - (idxB === -1 ? 9999 : idxB);
                   });
               }
               setPlanning(generatedPlanning); 
@@ -445,48 +486,30 @@ function App() {
       const bonusOr = agentConfig.BONUS_OR || 50;
       const bonusAg = agentConfig.BONUS_ARGENT || 10;
 
+      const joursSemaine = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+
       return (
           <div style={{display:'flex', height:'100%'}}>
-              {/* NOUVELLE LISTE GAUCHE (Éditable) */}
               <div style={{width: 260, borderRight:'1px solid #e2e8f0', display:'flex', flexDirection:'column', background:'#f8fafc'}}>
-                  
-                  {/* Titre et Bouton Ajout */}
                   <div style={{padding: '15px 10px', borderBottom: '1px solid #e2e8f0', display:'flex', justifyContent:'space-between', alignItems:'center', background:'white'}}>
                       <h4 style={{margin:0, color:'#64748b', fontSize:12, textTransform:'uppercase'}}>Agents ({config.CONTROLEURS.length})</h4>
-                      <button 
-                          onClick={handleAddAgent} 
-                          style={{fontSize:11, padding:'4px 8px', background:'#ecfdf5', color:'#10b981', border:'1px solid #a7f3d0', borderRadius:4, cursor:'pointer', fontWeight:'bold'}}
-                      >
-                          + Ajouter
-                      </button>
+                      <button onClick={handleAddAgent} style={{fontSize:11, padding:'4px 8px', background:'#ecfdf5', color:'#10b981', border:'1px solid #a7f3d0', borderRadius:4, cursor:'pointer', fontWeight:'bold'}}>+ Ajouter</button>
                   </div>
-
-                  {/* Liste Scrollable */}
                   <div style={{flex: 1, overflowY:'auto', padding: 10}}>
                       {config.CONTROLEURS.map((c, index) => {
                           const r = (config.AGENT_WORK_RATES && config.AGENT_WORK_RATES[c]) || 100;
                           const isSelected = selectedAgentConfig === c;
-                          
                           return (
-                              <div 
-                                key={c} 
-                                onClick={() => setSelectedAgentConfig(c)}
-                                style={{
+                              <div key={c} onClick={() => setSelectedAgentConfig(c)} style={{
                                     padding:'6px 10px', cursor:'pointer', borderRadius:6, marginBottom:4, fontSize:13, fontWeight:600,
-                                    background: isSelected ? 'white' : 'transparent',
-                                    color: isSelected ? '#2563eb' : '#475569',
-                                    boxShadow: isSelected ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
-                                    border: isSelected ? '1px solid #cbd5e1' : '1px solid transparent',
+                                    background: isSelected ? 'white' : 'transparent', color: isSelected ? '#2563eb' : '#475569',
+                                    boxShadow: isSelected ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', border: isSelected ? '1px solid #cbd5e1' : '1px solid transparent',
                                     display: 'flex', justifyContent: 'space-between', alignItems:'center'
-                                }}
-                              >
-                                  {/* Nom et Taux */}
+                                }}>
                                   <div style={{display:'flex', alignItems:'center', gap: 6}}>
                                       <span>{c}</span>
                                       {r < 100 && <span style={{fontSize:10, background:'#fee2e2', color:'#ef4444', padding:'1px 4px', borderRadius:4}}>{r}%</span>}
                                   </div>
-
-                                  {/* Actions Rapides */}
                                   {isSelected && (
                                       <div style={{display:'flex', gap: 4}} onClick={e => e.stopPropagation()}>
                                           <div style={{display:'flex', flexDirection:'column', gap:1}}>
@@ -505,7 +528,71 @@ function App() {
 
               <div style={{flex:1, padding:30, overflowY:'auto'}}>
                   {!selectedAgentConfig ? (
-                      <div style={{color:'#94a3b8', textAlign:'center', marginTop:50}}>Sélectionnez un agent à gauche pour configurer ses habitudes.</div>
+                      <div>
+                          <div style={{color:'#94a3b8', textAlign:'center', marginTop:50, marginBottom: 50}}>Sélectionnez un agent à gauche pour configurer ses habitudes individuelles.</div>
+                          
+                          {/* NOUVEAU : VUE GLOBALE EXCLUSIONS (QUAND AUCUN AGENT SÉLECTIONNÉ) */}
+                          <div style={{background:'white', border:'1px solid #cbd5e1', borderRadius:8, padding:20, boxShadow:'0 2px 4px rgba(0,0,0,0.05)'}}>
+                              <h2 style={{marginTop:0, color:'#1e293b'}}>🚫 Incompatibilités de Recouvrement (Global)</h2>
+                              <p style={{fontSize:13, color:'#64748b'}}>Définissez les paires d'agents qui ne doivent pas se retrouver sur des horaires qui se chevauchent.</p>
+                              
+                              <div style={{display:'flex', gap:15, alignItems:'center', background:'#f8fafc', padding:15, borderRadius:8, border:'1px solid #e2e8f0', flexWrap:'wrap'}}>
+                                  <select style={selectStyle} value={exclA1} onChange={e=>setExclA1(e.target.value)}>
+                                      <option value="">Agent 1...</option>
+                                      {config.CONTROLEURS.map(c=><option key={c} value={c}>{c}</option>)}
+                                  </select>
+                                  <span style={{color:'#94a3b8'}}>⚡</span>
+                                  <select style={selectStyle} value={exclA2} onChange={e=>setExclA2(e.target.value)}>
+                                      <option value="">Agent 2...</option>
+                                      {config.CONTROLEURS.map(c=><option key={c} value={c}>{c}</option>)}
+                                  </select>
+                                  
+                                  <div style={{borderLeft:'1px solid #cbd5e1', height:30}}></div>
+
+                                  <label style={{display:'flex', alignItems:'center', gap:5, cursor:'pointer'}}>
+                                      <input type="checkbox" checked={exclStrict} onChange={e=>setExclStrict(e.target.checked)} />
+                                      <span style={{fontSize:12, fontWeight:600, color: exclStrict ? '#dc2626' : '#d97706'}}>
+                                          {exclStrict ? "Stricte (Interdit)" : "Souple (Pénalité)"}
+                                      </span>
+                                  </label>
+
+                                  <div style={{borderLeft:'1px solid #cbd5e1', height:30}}></div>
+
+                                  <div style={{display:'flex', gap:2}}>
+                                      {joursSemaine.map((j, i) => (
+                                          <div 
+                                            key={i} 
+                                            onClick={() => toggleExclusionDay(i)}
+                                            style={{
+                                                padding:'4px 6px', fontSize:10, fontWeight:'bold', borderRadius:4, cursor:'pointer',
+                                                background: exclDays.includes(i) ? '#2563eb' : '#e2e8f0',
+                                                color: exclDays.includes(i) ? 'white' : '#64748b'
+                                            }}
+                                          >{j}</div>
+                                      ))}
+                                  </div>
+                                  <div style={{fontSize:10, color:'#94a3b8', fontStyle:'italic'}}>{exclDays.length===0 ? "(Tous les jours)" : ""}</div>
+
+                                  <button onClick={handleAddExclusion} style={addButtonStyle('white', '#2563eb', '#1d4ed8')}>+ Ajouter Règle</button>
+                              </div>
+
+                              <div style={{marginTop:20, display:'flex', flexDirection:'column', gap:8}}>
+                                  {(!config.EXCLUSIONS || config.EXCLUSIONS.length === 0) && <div style={{fontSize:13, color:'#94a3b8', fontStyle:'italic'}}>Aucune incompatibilité définie.</div>}
+                                  {config.EXCLUSIONS?.map((excl, idx) => (
+                                      <div key={idx} style={{display:'flex', alignItems:'center', gap:15, padding:10, border:'1px solid #e2e8f0', borderRadius:6, background: excl.isStrict ? '#fef2f2':'#fffbeb'}}>
+                                          <div style={{fontWeight:'bold', width:100, display:'flex', justifyContent:'space-between'}}><span>{excl.agent1}</span> ⚡ <span>{excl.agent2}</span></div>
+                                          <div style={{fontSize:11, padding:'2px 6px', borderRadius:4, background: excl.isStrict ? '#ef4444':'#f59e0b', color:'white', fontWeight:'bold'}}>
+                                              {excl.isStrict ? 'STRICTE' : 'SOUPLE'}
+                                          </div>
+                                          <div style={{fontSize:11, color:'#64748b'}}>
+                                              {excl.days.length === 0 ? "Tous les jours" : "Jours : " + excl.days.map(d => joursSemaine[d]).join(', ')}
+                                          </div>
+                                          <button onClick={() => handleDeleteExclusion(idx)} style={{marginLeft:'auto', border:'none', background:'transparent', color:'#ef4444', cursor:'pointer', fontWeight:'bold'}}>Supprimer</button>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+                      </div>
                   ) : (
                       <div>
                           <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:30, borderBottom:'1px solid #e2e8f0', paddingBottom:20}}>
@@ -589,7 +676,7 @@ function App() {
             <div style={{display:'flex', gap:10, alignItems:'center'}}><span style={{fontSize:20}}>✈️</span> <span style={{fontWeight:'bold'}}>TDS Manager</span></div>
             <div style={{display:'flex', gap:5}}>
                 {['Planning', 'Desiderata', 'Bilan', 'Config'].map(t => (
-                    <button key={t} onClick={() => setActiveTab(t.toLowerCase() as any)} style={{padding:'6px 12px', borderRadius:6, border:'none', background: activeTab===t.toLowerCase()?'#eff6ff':'transparent', color: activeTab===t.toLowerCase()?'#2563eb':'#64748b', cursor:'pointer', fontWeight:'bold'}}>{t}</button>
+                    <button key={t} onClick={() => { setActiveTab(t.toLowerCase() as any); setSelectedAgentConfig(""); }} style={{padding:'6px 12px', borderRadius:6, border:'none', background: activeTab===t.toLowerCase()?'#eff6ff':'transparent', color: activeTab===t.toLowerCase()?'#2563eb':'#64748b', cursor:'pointer', fontWeight:'bold'}}>{t}</button>
                 ))}
             </div>
             <div style={{display:'flex', gap:10, alignItems:'center'}}>
@@ -645,7 +732,8 @@ function App() {
                     
                     <div style={sidebarSectionStyle}>
                         <h3 style={sidebarTitleStyle}>📗 SOURCE CSV (LECTURE)</h3>
-                        <div style={{marginBottom:10}}><label style={labelStyle}>URL Google Sheet (Public)</label><input type="text" value={sheetUrl} onChange={e=>setSheetUrl(e.target.value)} style={inputStyle}/></div>
+                        {/* URL lue depuis la config */}
+                        <div style={{marginBottom:10}}><label style={labelStyle}>URL Google Sheet (Public)</label><input type="text" value={config.SHEET_URL || ""} onChange={e=>handleUrlChange(e.target.value)} style={inputStyle}/></div>
                         <button onClick={handleImport} style={secondaryButtonStyle}>📥 Importer Désidérata</button>
                     </div>
 

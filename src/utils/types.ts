@@ -1,10 +1,19 @@
+export interface ExclusionRule {
+  agent1: string;
+  agent2: string;
+  isStrict: boolean;
+  days: number[]; // 0=Dimanche, 1=Lundi, ..., 6=Samedi
+}
+
 export interface AppConfig {
   ANNEE: number;
+  SHEET_URL?: string; // NOUVEAU : Sauvegarde du lien CSV
   CONTROLEURS: string[];
   CONTROLLERS_AFFECTES_BUREAU?: string[];
   CONTROLLERS_PARITE_STRICTE?: string[];
-  AGENT_WORK_RATES?: {[agentName: string]: number };
+  AGENT_WORK_RATES?: { [agentName: string]: number };
   AGENT_BALANCES?: { [agentName: string]: number }; 
+  EXCLUSIONS?: ExclusionRule[]; // NOUVEAU : Règles d'incompatibilité
   VACATIONS: {
     [code: string]: {
       debut: number;
@@ -30,6 +39,6 @@ export interface AppConfig {
     BUFFER_DAYS?: number;
     REQUIRE_2_CONSECUTIVE_REST_DAYS?: boolean;
     MAX_SHIFT_TOLERANCE?: number;
-    LOCKED_UNTIL_DAY?: number; // <--- NOUVEAU
+    LOCKED_UNTIL_DAY?: number;
   };
 }
