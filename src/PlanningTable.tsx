@@ -14,27 +14,22 @@ const safeString = (val: any): string => {
     return String(val);
 };
 
-// --- 1. HEADER GLOBAL (Vue Désidérata) ---
-const GlobalHeader = (props: any) => {
+// ... TOUS LES COMPOSANTS HEADERS ET CELLRENDERERS SONT IDENTIQUES ...
+// (GlobalHeader, SummaryHeader, CustomHeader, AgentCellRenderer, ShiftCellRenderer)
+
+const GlobalHeader = (props: any) => { /* ... Identique ... */ 
     const { config, context } = props;
     const { optionalCoverage, onToggleGlobalOptional, daysList } = context; 
-    
     const allShifts = config && config.VACATIONS ? Object.keys(config.VACATIONS) : ['M', 'J1', 'J3'];
-    
     allShifts.sort((a: string, b: string) => {
         const startA = config?.VACATIONS[a]?.debut || 0;
         const startB = config?.VACATIONS[b]?.debut || 0;
         return startA - startB;
     });
-    
     return (
-        <div style={{
-            display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', 
-            paddingTop: 6, background: '#f1f5f9', borderRight:'1px solid #cbd5e1', borderBottom:'1px solid #cbd5e1', boxSizing: 'border-box'
-        }}>
+        <div style={{display:'flex', flexDirection:'column', alignItems:'center', width:'100%', height:'100%', paddingTop: 6, background: '#f1f5f9', borderRight:'1px solid #cbd5e1', borderBottom:'1px solid #cbd5e1', boxSizing: 'border-box'}}>
             <div style={{fontSize: 10, fontWeight: '800', color: '#64748b', textTransform:'uppercase', flexShrink: 0}}>GLOBAL</div>
             <div style={{fontSize: 9, color: '#94a3b8', fontStyle:'italic', marginBottom: 4, flexShrink: 0}}>1-Clic</div>
-            
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: '2px', rowGap: '2px', width: '100%', padding: '0 2px', boxSizing: 'border-box', paddingBottom: 4, overflowY: 'auto' }}>
                 {allShifts.map((code: string, idx: number) => {
                     let isOptionalEverywhere = false;
@@ -57,22 +52,17 @@ const GlobalHeader = (props: any) => {
     );
 };
 
-// --- 2. HEADER RÉSUMÉ (Vue Planning) ---
 const SummaryHeader = (props: any) => {
     const { api, config, context } = props;
     const { daysList } = context; 
-    
     const targetShifts = config && config.VACATIONS ? Object.keys(config.VACATIONS) :['M', 'J1', 'J3'];
     const missingCounts: Record<string, number> = {};
     targetShifts.forEach((s: string) => missingCounts[s] = 0);
-
     let hasAnyData = false;
-
     if (api && daysList) {
         daysList.forEach((dayNum: number) => {
             const lockedUntil = config?.CONTRAT?.LOCKED_UNTIL_DAY || 0;
             if (dayNum <= lockedUntil) return;
-
             const dayStr = safeString(dayNum);
             const presentOnDay = new Set<string>();
             api.forEachNode((node: any) => {
@@ -87,9 +77,7 @@ const SummaryHeader = (props: any) => {
             });
         });
     }
-
     const boxStyle: React.CSSProperties = { display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:'100%', height:'100%', padding: '4px', background:'#fff', borderRight:'1px solid #cbd5e1', borderBottom:'1px solid #cbd5e1', boxSizing: 'border-box' };
-
     if (!hasAnyData) {
         return (
             <div style={boxStyle}>
@@ -98,7 +86,6 @@ const SummaryHeader = (props: any) => {
             </div>
         );
     }
-
     const summary = Object.entries(missingCounts)
         .filter(([_, count]) => count > 0)
         .sort((a, b) => {
@@ -106,7 +93,6 @@ const SummaryHeader = (props: any) => {
             const startB = config?.VACATIONS[b[0]]?.debut || 0;
             return startA - startB;
         });
-
     return (
         <div style={boxStyle}>
             <div style={{fontSize: 9, fontWeight: '800', color: '#64748b', marginBottom: 4, textTransform:'uppercase'}}>MANQUANTS</div>
@@ -121,14 +107,11 @@ const SummaryHeader = (props: any) => {
     );
 };
 
-// --- 3. HEADER QUOTIDIEN ---
 const CustomHeader = (props: any) => {
     const { displayName, dayNum, fullDate, api, config, context } = props;
     const { optionalCoverage, onToggleOptionalCoverage, isDesiderataView } = context || {};
-
     const lockedUntil = config?.CONTRAT?.LOCKED_UNTIL_DAY || 0;
     const isLocked = dayNum <= lockedUntil;
-
     const targetShifts = config && config.VACATIONS ? Object.keys(config.VACATIONS) :['M', 'J1', 'J3']; 
     const presentShifts = new Set<string>();
     
@@ -202,7 +185,6 @@ const CustomHeader = (props: any) => {
     );
 };
 
-// --- 4. AGENT CELL ---
 const AgentCellRenderer = (props: any) => {
     const agentName = props.value;
     const rowData = props.data;
@@ -215,7 +197,6 @@ const AgentCellRenderer = (props: any) => {
     };
 
     let worked = 0; let leaves = 0; let refusedCount = 0; let softCount = 0;
-    
     let lockedDaysCount = 0;
     const lockedUntil = config?.CONTRAT?.LOCKED_UNTIL_DAY || 0;
 
@@ -258,17 +239,18 @@ const AgentCellRenderer = (props: any) => {
     const statsColor = isDesiderataView ? '#64748b' : (worked >= (finalTarget - 1) ? '#16a34a' : '#ea580c');
     const isBureau = (config?.CONTROLLERS_AFFECTES_BUREAU ||[]).includes(agentName);
     
-    const nameStyle = { 
-        fontWeight: '800', fontSize: 13, 
-        color: isBureau ? '#2563eb' : '#334155',
-        cursor: isDesiderataView ? 'pointer' : 'default',
-        textDecoration: isDesiderataView ? 'underline dotted #94a3b8' : 'none'
-    };
-
     const handleRowClick = (e: React.MouseEvent) => {
         if (!isDesiderataView || !onToggleRowSoft) return;
         e.stopPropagation();
         onToggleRowSoft(agentName);
+    };
+
+    const nameStyle = { 
+        fontWeight: '800', 
+        fontSize: 13, 
+        color: isBureau ? '#2563eb' : '#334155',
+        cursor: isDesiderataView ? 'pointer' : 'default',
+        textDecoration: isDesiderataView ? 'underline dotted #94a3b8' : 'none'
     };
 
     const handleBalanceClick = (e: React.MouseEvent) => {
@@ -308,7 +290,6 @@ const AgentCellRenderer = (props: any) => {
     );
 };
 
-// --- 5. SHIFT CELL ---
 const ShiftCellRenderer = (props: any) => {
     const rawVal = props.value;
     const { preAssignments, showDesiderataMatch, softConstraints, onToggleSoft, isDesiderataView, hideOff, config } = props.context || {};
@@ -413,10 +394,11 @@ interface PlanningTableProps {
   onToggleGlobalOptional?: (shift: string) => void;
   onUpdateBalance?: (agent: string, val: number) => void;
   onToggleRowSoft?: (agent: string) => void;
+  gridRef?: React.RefObject<any>; // NOUVEAU : Référence pour copier
 }
 
 const PlanningTable: React.FC<PlanningTableProps> = (props) => {
-  const { data, year, startDay, endDay, config, isDesiderataView } = props;
+  const { data, year, startDay, endDay, config, isDesiderataView, gridRef } = props;
 
   const components = useMemo(() => ({
       agColumnHeaderSummary: SummaryHeader, 
@@ -477,6 +459,7 @@ const PlanningTable: React.FC<PlanningTableProps> = (props) => {
     <div className="ag-theme-balham" style={{ height: '100%', width: '100%', zoom: `${props.zoomLevel}%` }}>
       <style>{`.ag-theme-balham .ag-header-cell { padding: 0 !important; } .ag-theme-balham .ag-header-cell-label { width: 100%; height: 100%; padding: 0; } .ag-theme-balham .ag-root-wrapper { border: 1px solid #94a3b8; } .ag-theme-balham .ag-header { border-bottom: 2px solid #cbd5e1; background-color: white; } .ag-theme-balham .ag-row { border-bottom-color: #cbd5e1; } .ag-theme-balham .ag-pinned-left-header { border-right: 2px solid #cbd5e1; } .ag-theme-balham .ag-cell-focus { border-color: #3b82f6 !important; } .ag-theme-balham .weekend-header { background-color: #e5e7eb !important; border-bottom: 1px solid #cbd5e1; }`}</style>
       <AgGridReact 
+        ref={gridRef} // LIAISON DE LA RÉFÉRENCE ICI
         rowData={data ||[]} 
         columnDefs={columnDefs} 
         components={components} 
@@ -486,10 +469,9 @@ const PlanningTable: React.FC<PlanningTableProps> = (props) => {
         headerHeight={headerHeight} 
         rowHeight={50}     
         
-        // --- NOUVEAUTÉ : COPIER-COLLER EXCEL ---
-        enableRangeSelection={true}
+        // Configuration de la copie (sans les guillemets parasites d'AG Grid)
+        suppressCopyRowsToClipboard={false}
         copyHeadersToClipboard={true}
-        // ---------------------------------------
       />
     </div>
   );
