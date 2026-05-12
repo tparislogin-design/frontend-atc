@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import React from 'react';
 import axios from 'axios';
 
 // Composants
@@ -59,7 +60,9 @@ const DEFAULT_CONFIG: AppConfig = {
     MAX_SHIFT_TOLERANCE: 1,
     BUFFER_DAYS: 4,
     REQUIRE_2_CONSECUTIVE_REST_DAYS: true,
-    LOCKED_UNTIL_DAY: 0
+    LOCKED_UNTIL_DAY: 0,
+    WEIGHT_EQUITY: 1000,
+    WEIGHT_OPTIONAL: 500
   }
 };
 
@@ -95,6 +98,7 @@ function App() {
   const [showDesiderataMatch, setShowDesiderataMatch] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
 
+  // États Config
   const [selectedAgentConfig, setSelectedAgentConfig] = useState<string>("");
   const [newCycleOr1, setNewCycleOr1] = useState("");
   const [newCycleOr2, setNewCycleOr2] = useState("");
@@ -106,7 +110,6 @@ function App() {
   const [exclStrict, setExclStrict] = useState(true);
   const [exclDays, setExclDays] = useState<number[]>([]); 
 
-  // Réf pour AG Grid (Copier/Coller)
   const gridRef = useRef<any>(null);
 
   useEffect(() => {
@@ -315,6 +318,7 @@ function App() {
       const data = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
       const a = document.createElement('a'); a.href = data; a.download = `tds_config_${year}.json`; a.click();
   };
+  
   const handleImportConfig = (event: React.ChangeEvent<HTMLInputElement>) => {
       const fileReader = new FileReader();
       if (event.target.files && event.target.files[0]) {
@@ -323,7 +327,10 @@ function App() {
               try {
                   const c = JSON.parse(e.target?.result as string);
                   if (c.VACATIONS) { setConfig(c); if(c.ANNEE) setYear(c.ANNEE); alert("OK"); }
-              } catch (err) { alert("Erreur fichier"); }
+              } catch (err) { 
+                  console.error("Erreur de parsing JSON", err); // CORRECTION ICI
+                  alert("Erreur fichier"); 
+              }
           };
       }
   };
@@ -449,18 +456,14 @@ function App() {
       finally { setLoading(false); }
   };
 
-  // --- NOUVEAU : FONCTION DE COPIE ---
   const handleCopyToExcel = () => {
       if (gridRef.current && gridRef.current.api) {
-          const data = gridRef.current.api.getDataAsCsv({
-              suppressQuotes: true,
-              columnSeparator: '\t' // Format Tabulation pour Excel/Sheets
-          });
+          const data = gridRef.current.api.getDataAsCsv({ suppressQuotes: true, columnSeparator: '\t' });
           navigator.clipboard.writeText(data).then(() => {
               alert("✅ Planning copié ! Faites Ctrl+V dans Excel ou Google Sheets.");
-          }).catch(err => {
-              console.error('Erreur de copie:', err);
-              alert("Erreur lors de la copie.");
+          }).catch(err => { 
+              console.error(err); // CORRECTION ICI AUSSI POUR ESLINT
+              alert("Erreur lors de la copie."); 
           });
       }
   };
@@ -526,21 +529,42 @@ function App() {
                               <p style={{fontSize:13, color:'#64748b'}}>Définissez les paires d'agents qui ne doivent pas se retrouver sur des horaires qui se chevauchent.</p>
                               
                               <div style={{display:'flex', gap:15, alignItems:'center', background:'#f8fafc', padding:15, borderRadius:8, border:'1px solid #e2e8f0', flexWrap:'wrap'}}>
-                                  <select style={selectStyle} value={exclA1} onChange={e=>setExclA1(e.target.value)}><option value="">Agent 1...</option>{config.CONTROLEURS.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                                  <select style={selectStyle} value={exclA1} onChange={e=>setExclA1(e.target.value)}>
+                                      <option value="">Agent 1...</option>
+                                      {config.CONTROLEURS.map(c=><option key={c} value={c}>{c}</option>)}
+                                  </select>
                                   <span style={{color:'#94a3b8'}}>⚡</span>
-                                  <select style={selectStyle} value={exclA2} onChange={e=>setExclA2(e.target.value)}><option value="">Agent 2...</option>{config.CONTROLEURS.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                                  <select style={selectStyle} value={exclA2} onChange={e=>setExclA2(e.target.value)}>
+                                      <option value="">Agent 2...</option>
+                                      {config.CONTROLEURS.map(c=><option key={c} value={c}>{c}</option>)}
+                                  </select>
+                                  
                                   <div style={{borderLeft:'1px solid #cbd5e1', height:30}}></div>
+
                                   <label style={{display:'flex', alignItems:'center', gap:5, cursor:'pointer'}}>
                                       <input type="checkbox" checked={exclStrict} onChange={e=>setExclStrict(e.target.checked)} />
-                                      <span style={{fontSize:12, fontWeight:600, color: exclStrict ? '#dc2626' : '#d97706'}}>{exclStrict ? "Stricte (Interdit)" : "Souple (Pénalité)"}</span>
+                                      <span style={{fontSize:12, fontWeight:600, color: exclStrict ? '#dc2626' : '#d97706'}}>
+                                          {exclStrict ? "Stricte (Interdit)" : "Souple (Pénalité)"}
+                                      </span>
                                   </label>
+
                                   <div style={{borderLeft:'1px solid #cbd5e1', height:30}}></div>
+
                                   <div style={{display:'flex', gap:2}}>
                                       {joursSemaine.map((j, i) => (
-                                          <div key={i} onClick={() => toggleExclusionDay(i)} style={{padding:'4px 6px', fontSize:10, fontWeight:'bold', borderRadius:4, cursor:'pointer', background: exclDays.includes(i) ? '#2563eb' : '#e2e8f0', color: exclDays.includes(i) ? 'white' : '#64748b'}}>{j}</div>
+                                          <div 
+                                            key={i} 
+                                            onClick={() => toggleExclusionDay(i)}
+                                            style={{
+                                                padding:'4px 6px', fontSize:10, fontWeight:'bold', borderRadius:4, cursor:'pointer',
+                                                background: exclDays.includes(i) ? '#2563eb' : '#e2e8f0',
+                                                color: exclDays.includes(i) ? 'white' : '#64748b'
+                                            }}
+                                          >{j}</div>
                                       ))}
                                   </div>
                                   <div style={{fontSize:10, color:'#94a3b8', fontStyle:'italic'}}>{exclDays.length===0 ? "(Tous les jours)" : ""}</div>
+
                                   <button onClick={handleAddExclusion} style={addButtonStyle('white', '#2563eb', '#1d4ed8')}>+ Ajouter Règle</button>
                               </div>
 
@@ -549,8 +573,12 @@ function App() {
                                   {config.EXCLUSIONS?.map((excl, idx) => (
                                       <div key={idx} style={{display:'flex', alignItems:'center', gap:15, padding:10, border:'1px solid #e2e8f0', borderRadius:6, background: excl.isStrict ? '#fef2f2':'#fffbeb'}}>
                                           <div style={{fontWeight:'bold', width:100, display:'flex', justifyContent:'space-between'}}><span>{excl.agent1}</span> ⚡ <span>{excl.agent2}</span></div>
-                                          <div style={{fontSize:11, padding:'2px 6px', borderRadius:4, background: excl.isStrict ? '#ef4444':'#f59e0b', color:'white', fontWeight:'bold'}}>{excl.isStrict ? 'STRICTE' : 'SOUPLE'}</div>
-                                          <div style={{fontSize:11, color:'#64748b'}}>{excl.days.length === 0 ? "Tous les jours" : "Jours : " + excl.days.map(d => joursSemaine[d]).join(', ')}</div>
+                                          <div style={{fontSize:11, padding:'2px 6px', borderRadius:4, background: excl.isStrict ? '#ef4444':'#f59e0b', color:'white', fontWeight:'bold'}}>
+                                              {excl.isStrict ? 'STRICTE' : 'SOUPLE'}
+                                          </div>
+                                          <div style={{fontSize:11, color:'#64748b'}}>
+                                              {excl.days.length === 0 ? "Tous les jours" : "Jours : " + excl.days.map(d => joursSemaine[d]).join(', ')}
+                                          </div>
                                           <button onClick={() => handleDeleteExclusion(idx)} style={{marginLeft:'auto', border:'none', background:'transparent', color:'#ef4444', cursor:'pointer', fontWeight:'bold'}}>Supprimer</button>
                                       </div>
                                   ))}
@@ -646,9 +674,7 @@ function App() {
             <div style={{display:'flex', gap:10, alignItems:'center'}}>
                 {activeTab === 'planning' && (
                     <div style={{display:'flex', gap: 5}}>
-                        {/* NOUVEAU BOUTON : COPIER EXCEL */}
                         <button onClick={handleCopyToExcel} style={{background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, display:'flex', alignItems:'center', gap:5}}>📋 Copier</button>
-                        
                         <button onClick={() => setShowDesiderataMatch(!showDesiderataMatch)} style={{background: showDesiderataMatch ? '#e0f2fe' : 'transparent', color: showDesiderataMatch ? '#0284c7' : '#64748b', border: showDesiderataMatch ? '1px solid #7dd3fc' : '1px solid #e2e8f0', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600}}>{showDesiderataMatch ? '👁️ Masquer Demandes' : '👁️ Voir Demandes'}</button>
                         <button onClick={() => setHideOff(!hideOff)} style={{background: hideOff ? '#f1f5f9' : 'transparent', color: hideOff ? '#334155' : '#64748b', border: hideOff ? '1px solid #cbd5e1' : '1px solid #e2e8f0', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600}}>{hideOff ? '👻 Voir OFF' : '👻 Masquer OFF'}</button>
                     </div>
@@ -680,7 +706,7 @@ function App() {
                             onToggleGlobalOptional={handleToggleGlobalOptional}
                             onUpdateBalance={handleUpdateBalance}
                             onToggleRowSoft={handleToggleRowSoft}
-                            gridRef={gridRef} // ON PASSE LA REF ICI
+                            gridRef={gridRef}
                         />
                     )}
                     {activeTab === 'bilan' && <Bilan planning={planning} config={config} year={year} startDay={startDay} endDay={endDay} />}
@@ -727,6 +753,12 @@ function App() {
                         <div style={rowStyle}><label style={labelStyle}>Tolérance Cible</label><input type="number" value={config.CONTRAT.MAX_SHIFT_TOLERANCE ?? 1} onChange={e=>handleContratChange('MAX_SHIFT_TOLERANCE', e.target.value)} style={{...numberInputStyle, color:'#d97706'}} /></div>
                         
                         <div style={rowStyle}><label style={labelStyle}>Temps Limite (sec)</label><input type="number" value={config.CONTRAT.SOLVER_TIME_LIMIT || 25} onChange={e=>handleContratChange('SOLVER_TIME_LIMIT', e.target.value)} style={{...numberInputStyle, color:'#3b82f6', fontWeight:'bold'}} /></div>
+                        
+                        <div style={rowStyle}><label style={labelStyle}>Poids: Équité</label><input type="number" value={config.CONTRAT.WEIGHT_EQUITY ?? 1000} onChange={e=>handleContratChange('WEIGHT_EQUITY', e.target.value)} style={{...numberInputStyle, color:'#8b5cf6'}} title="Importance du lissage de la charge de travail" /></div>
+                        <div style={rowStyle}><label style={labelStyle}>Poids: Trous Opt</label><input type="number" value={config.CONTRAT.WEIGHT_OPTIONAL ?? 500} onChange={e=>handleContratChange('WEIGHT_OPTIONAL', e.target.value)} style={{...numberInputStyle, color:'#8b5cf6'}} title="Pénalité si un poste bleu n'est pas couvert" /></div>
+
+                        <div style={{height:1, background:'#f1f5f9', margin:'10px 0'}}></div>
+
                         <div style={rowStyle}><label style={labelStyle}>Max Heures (7j glissants)</label><input type="number" value={config.CONTRAT.MAX_HOURS_7_ROLLING} onChange={e=>handleContratChange('MAX_HOURS_7_ROLLING', e.target.value)} style={numberInputStyle} /></div>
                         <div style={rowStyle}><label style={labelStyle}>Max Heures (Sem. Civile)</label><input type="number" value={config.CONTRAT.MAX_HOURS_WEEK_CALENDAR} onChange={e=>handleContratChange('MAX_HOURS_WEEK_CALENDAR', e.target.value)} style={numberInputStyle} /></div>
                         <div style={rowStyle}><label style={labelStyle}>Repos Min (h)</label><input type="number" value={config.CONTRAT.MIN_REST_HOURS} onChange={e=>handleContratChange('MIN_REST_HOURS', e.target.value)} style={numberInputStyle} /></div>

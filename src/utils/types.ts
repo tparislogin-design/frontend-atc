@@ -7,13 +7,13 @@ export interface ExclusionRule {
 
 export interface AppConfig {
   ANNEE: number;
-  SHEET_URL?: string; // NOUVEAU : Sauvegarde du lien CSV
+  SHEET_URL?: string;
   CONTROLEURS: string[];
   CONTROLLERS_AFFECTES_BUREAU?: string[];
   CONTROLLERS_PARITE_STRICTE?: string[];
   AGENT_WORK_RATES?: { [agentName: string]: number };
   AGENT_BALANCES?: { [agentName: string]: number }; 
-  EXCLUSIONS?: ExclusionRule[]; // NOUVEAU : Règles d'incompatibilité
+  EXCLUSIONS?: ExclusionRule[];
   VACATIONS: {
     [code: string]: {
       debut: number;
@@ -40,5 +40,8 @@ export interface AppConfig {
     REQUIRE_2_CONSECUTIVE_REST_DAYS?: boolean;
     MAX_SHIFT_TOLERANCE?: number;
     LOCKED_UNTIL_DAY?: number;
+    // NOUVEAUX CHAMPS (Poids de pondération algorithmique)
+    WEIGHT_EQUITY?: number;
+    WEIGHT_OPTIONAL?: number;
   };
 }
